@@ -10,17 +10,17 @@ Use this module for pipeline status, job logs, retries, manual jobs, pipeline cr
 ## Python-First Commands
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" pipeline list
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" pipeline list --mine --status failed
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" pipeline status 12345
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" pipeline retry 12345
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" pipeline cancel 12345
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" pipeline list
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" pipeline list --mine --status failed
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" pipeline status 12345
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" pipeline retry 12345
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" pipeline cancel 12345
 
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" job log 67890
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" job log 67890 --tail 100
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" job retry 67890
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" job cancel 67890
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" job play 67890
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" job log 67890
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" job log 67890 --tail 100
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" job retry 67890
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" job cancel 67890
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" job play 67890
 ```
 
 ## glab Fallback and Advanced Flows

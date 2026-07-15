@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
 import subprocess
 import uuid
@@ -60,7 +61,7 @@ def parse_skill_md(skill_path: Path) -> tuple[str, str, str]:
 
 
 def get_skill_repository_root() -> Path:
-    """Return the OpenCode config root that contains the skills directory."""
+    """Return the repository root that contains the skills directory."""
     return Path(__file__).resolve().parents[3]
 
 
@@ -106,8 +107,8 @@ def replace_description(skill_path: Path, new_description: str) -> None:
 
 
 @contextmanager
-def stage_skill_for_opencode(skill_path: Path, description_override: str | None = None):
-    """Ensure the target skill is visible to `opencode run` during evaluation."""
+def stage_skill_for_runtime(skill_path: Path, description_override: str | None = None):
+    """Ensure the target skill is visible to the configured runtime during evaluation."""
     source = skill_path.resolve()
     skills_root = get_skills_root()
     if source.parent == skills_root:
@@ -139,25 +140,44 @@ def stage_skill_for_opencode(skill_path: Path, description_override: str | None 
         shutil.rmtree(staged, ignore_errors=True)
 
 
-def run_opencode_json(
+def build_runner_command(
     prompt: str,
-    agent: str = "smart",
+    command_template: str,
+    agent: str | None = None,
+    model: str | None = None,
+    directory: Path | None = None,
+) -> list[str]:
+    """Render a shell-like command template into an argv list without invoking a shell."""
+    values = {
+        "prompt": prompt,
+        "agent": agent or "",
+        "model": model or "",
+        "directory": str(directory) if directory else "",
+    }
+    command = [part.format_map(values) for part in shlex.split(command_template)]
+    command = [part for part in command if part]
+    if "{prompt}" not in command_template:
+        command.append(prompt)
+    if not command:
+        raise ValueError("Runner command template produced an empty command")
+    return command
+
+
+def run_runner_json(
+    prompt: str,
+    command_template: str,
+    agent: str | None = None,
     model: str | None = None,
     directory: Path | None = None,
     timeout: int = 300,
 ) -> list[dict]:
-    """Run `opencode run` and return parsed JSON events."""
-    command = ["opencode", "run", "--agent", agent, "--format", "json"]
-    if model:
-        command.extend(["--model", model])
-    if directory:
-        command.extend(["--dir", str(directory)])
-    command.append(prompt)
+    """Run the configured JSONL runner and return parsed events."""
+    command = build_runner_command(prompt, command_template, agent, model, directory)
 
     result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
     if result.returncode != 0:
         raise RuntimeError(
-            result.stderr.strip() or result.stdout.strip() or f"opencode run failed with code {result.returncode}"
+            result.stderr.strip() or result.stdout.strip() or f"Runner failed with code {result.returncode}"
         )
 
     events = []
@@ -172,14 +192,16 @@ def run_opencode_json(
     return events
 
 
-def extract_text_from_opencode_events(events: list[dict]) -> str:
-    """Collect text blocks from an OpenCode JSON event stream."""
+def extract_text_from_runner_events(events: list[dict]) -> str:
+    """Collect text blocks from normalized JSONL runner events."""
     parts = []
     for event in events:
-        if event.get("type") != "text":
+        if event.get("type") not in {"text", "message"}:
             continue
-        part = event.get("part", {})
-        text = part.get("text")
+        text = event.get("text")
+        if not isinstance(text, str):
+            part = event.get("part", {})
+            text = part.get("text") if isinstance(part, dict) else None
         if isinstance(text, str) and text:
             parts.append(text)
     return "\n".join(parts).strip()

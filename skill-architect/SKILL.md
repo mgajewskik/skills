@@ -77,7 +77,7 @@ Use the scripts in `scripts/` for repeatable trigger-evaluation work.
 
 ### 4. Environment-Specific Adaptation
 
-Read this file when tool availability matters or the user is on Claude.ai, OpenCode, Cowork, or a headless environment:
+Read this file when tool availability or execution mode affects the workflow:
 
 - `references/environment-modes.md`
 
@@ -315,8 +315,8 @@ uv run scripts/package_skill.py <path/to/skill-folder>
 
 Useful utilities in `scripts/`:
 
-- General/OpenCode-friendly: `scripts/init_skill.py`, `scripts/quick_validate.py`, `scripts/package_skill.py`, `scripts/generate_report.py`, `scripts/aggregate_benchmark.py`
-- OpenCode trigger tooling: `scripts/run_eval.py`, `scripts/improve_description.py`, `scripts/run_loop.py`
+- General utilities: `scripts/init_skill.py`, `scripts/quick_validate.py`, `scripts/package_skill.py`, `scripts/generate_report.py`, `scripts/aggregate_benchmark.py`
+- Runtime-backed trigger tooling: `scripts/run_eval.py`, `scripts/improve_description.py`, `scripts/run_loop.py`
 
 ## NEVER
 

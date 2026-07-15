@@ -15,8 +15,8 @@ export GITLAB_SSL_VERIFY="false"                  # optional override for self-s
 Quick checks:
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" detect
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" whoami
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" detect
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" whoami
 ```
 
 ## glab Fallback Requirements

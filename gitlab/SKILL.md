@@ -41,8 +41,8 @@ Script location: `scripts/gl.py`
 ### Preflight
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" detect
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" whoami
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" detect
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" whoami
 ```
 
 If these fail because the environment is not ready, switch to `glab` and load [references/configuration.md](references/configuration.md).
@@ -54,13 +54,13 @@ If these fail because the environment is not ready, switch to `glab` and load [r
 Prefer `gl.py` for the common issue lifecycle:
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue list
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue info 45
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue create "Bug title" --description "Details"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue update 45 --title "New title"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue comment 45 "Working on this"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue close 45
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue reopen 45
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue list
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue info 45
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue create "Bug title" --description "Details"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue update 45 --title "New title"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue comment 45 "Working on this"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue close 45
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue reopen 45
 ```
 
 Load [references/issues.md](references/issues.md) when:
@@ -73,15 +73,15 @@ Load [references/issues.md](references/issues.md) when:
 Prefer `gl.py` for read/review/create/update flows:
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr list --reviewer me
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr info 123
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr diff 123
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr discussions 123 --unresolved-only
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr create "Feature title"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr update 123 --description-file /tmp/mr.md
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr assign 123 -r reviewer1
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr draft add 123 "Needs tests"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr draft publish 123
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr list --reviewer me
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr info 123
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr diff 123
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr discussions 123 --unresolved-only
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr create "Feature title"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr update 123 --description-file /tmp/mr.md
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr assign 123 -r reviewer1
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr draft add 123 "Needs tests"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr draft publish 123
 ```
 
 Load [references/mr-review.md](references/mr-review.md) when:
@@ -95,9 +95,9 @@ Load [references/mr-review.md](references/mr-review.md) when:
 Use `gl.py` first for structured status, jobs, and retries:
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" pipeline list
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" pipeline status 12345
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" job log 67890 --tail 100
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" pipeline list
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" pipeline status 12345
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" job log 67890 --tail 100
 ```
 
 Load [references/ci-cd.md](references/ci-cd.md) when:
@@ -109,10 +109,10 @@ Load [references/ci-cd.md](references/ci-cd.md) when:
 Start with:
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" actionable
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr list --reviewer me
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr list --author me
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" pipeline list --mine --status failed
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" actionable
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr list --reviewer me
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr list --author me
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" pipeline list --mine --status failed
 ```
 
 Load [references/work-status.md](references/work-status.md) when:

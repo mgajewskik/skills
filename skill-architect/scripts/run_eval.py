@@ -4,12 +4,13 @@
 #   "pyyaml",
 # ]
 # ///
-"""Run trigger evaluation for a skill description using OpenCode."""
+"""Run trigger evaluation for a skill description using a configured JSONL runner."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import select
 import subprocess
 import time
@@ -19,15 +20,17 @@ from pathlib import Path
 try:
     from .utils import (
         get_skill_repository_root,
+        build_runner_command,
         parse_skill_md,
-        stage_skill_for_opencode,
+        stage_skill_for_runtime,
         validate_trigger_eval_set,
     )
 except ImportError:
     from utils import (
         get_skill_repository_root,
+        build_runner_command,
         parse_skill_md,
-        stage_skill_for_opencode,
+        stage_skill_for_runtime,
         validate_trigger_eval_set,
     )
 
@@ -36,25 +39,23 @@ def run_single_query(
     query: str,
     visible_skill_name: str,
     project_root: str,
-    agent: str = "smart",
+    runner_command: str,
+    agent: str | None = None,
     model: str | None = None,
     timeout: int = 90,
 ) -> bool:
     wrapped_query = (
-        "Routing eval mode. Decide whether the normal OpenCode skill-selection mechanism should load a skill for the "
+        "Routing eval mode. Decide whether the normal skill-selection mechanism should load a skill for the "
         "user request below. Do not manually inspect files. Do not continue executing a loaded skill. Stop as soon as "
         "the routing decision is made.\n\n"
         f"<user_request>\n{query}\n</user_request>"
     )
-    command = ["opencode", "run", "--agent", agent, "--format", "json", "--dir", project_root]
-    if model:
-        command.extend(["--model", model])
-    command.append(wrapped_query)
+    command = build_runner_command(wrapped_query, runner_command, agent, model, Path(project_root))
 
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         if process.stdout is None or process.stderr is None:
-            raise RuntimeError("Failed to capture OpenCode output")
+            raise RuntimeError("Failed to capture runner output")
 
         start = time.time()
         while time.time() - start < timeout:
@@ -73,14 +74,18 @@ def run_single_query(
             except json.JSONDecodeError:
                 continue
 
-            if event.get("type") != "tool_use":
-                continue
+            normalized_match = event.get("type") == "skill_use" and event.get("name") == visible_skill_name
             part = event.get("part", {})
-            if part.get("tool") != "skill":
-                continue
-            state = part.get("state", {})
-            input_payload = state.get("input", {})
-            if input_payload.get("name") == visible_skill_name:
+            state = part.get("state", {}) if isinstance(part, dict) else {}
+            input_payload = state.get("input", {}) if isinstance(state, dict) else {}
+            tool_match = (
+                event.get("type") == "tool_use"
+                and isinstance(part, dict)
+                and part.get("tool") == "skill"
+                and isinstance(input_payload, dict)
+                and input_payload.get("name") == visible_skill_name
+            )
+            if normalized_match or tool_match:
                 process.terminate()
                 process.wait(timeout=5)
                 return True
@@ -88,18 +93,18 @@ def run_single_query(
         if process.poll() is None:
             process.terminate()
             process.wait(timeout=5)
-            raise RuntimeError(f"opencode run timed out after {timeout} seconds")
+            raise RuntimeError(f"Runner timed out after {timeout} seconds")
 
         if process.returncode not in (0, None):
             stderr_text = process.stderr.read().strip()
             stdout_tail = process.stdout.read().strip()
-            raise RuntimeError(stderr_text or stdout_tail or f"opencode run failed with code {process.returncode}")
+            raise RuntimeError(stderr_text or stdout_tail or f"Runner failed with code {process.returncode}")
 
         return False
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait()
-        raise RuntimeError(f"opencode run timed out after {timeout} seconds")
+        raise RuntimeError(f"Runner timed out after {timeout} seconds")
     finally:
         if process.poll() is None:
             process.kill()
@@ -113,13 +118,17 @@ def run_eval(
     runs_per_query: int = 1,
     trigger_threshold: float = 0.5,
     model: str | None = None,
-    agent: str = "smart",
+    agent: str | None = None,
+    runner_command: str = "",
     description_override: str | None = None,
     timeout: int = 90,
 ) -> dict:
     project_root = get_skill_repository_root()
 
-    with stage_skill_for_opencode(skill_path, description_override=description_override) as staged:
+    if not runner_command:
+        raise ValueError("A runner command is required")
+
+    with stage_skill_for_runtime(skill_path, description_override=description_override) as staged:
         visible_skill_name, _, _ = staged
 
         query_results: dict[str, list[bool]] = {}
@@ -134,6 +143,7 @@ def run_eval(
                         item["query"],
                         visible_skill_name,
                         str(project_root),
+                        runner_command,
                         agent,
                         model,
                         timeout,
@@ -178,7 +188,7 @@ def run_eval(
             "total": len(results),
         },
         "description": description,
-        "backend": "opencode",
+        "backend": "configured-runner",
         "agent": agent,
     }
 
@@ -192,9 +202,16 @@ def main() -> int:
     parser.add_argument("--runs-per-query", type=int, default=1)
     parser.add_argument("--trigger-threshold", type=float, default=0.5)
     parser.add_argument("--model", default=None)
-    parser.add_argument("--agent", default="smart")
+    parser.add_argument("--agent", default=None)
+    parser.add_argument(
+        "--runner-command",
+        default=os.environ.get("SKILL_EVAL_RUNNER"),
+        help="JSONL runner command template; supports {prompt}, {agent}, {model}, and {directory}",
+    )
     parser.add_argument("--timeout", type=int, default=90)
     args = parser.parse_args()
+    if not args.runner_command:
+        parser.error("--runner-command or SKILL_EVAL_RUNNER is required")
 
     eval_items = validate_trigger_eval_set(json.loads(Path(args.eval_set).read_text()))
     result = run_eval(
@@ -205,6 +222,7 @@ def main() -> int:
         args.trigger_threshold,
         args.model,
         args.agent,
+        args.runner_command,
         None,
         args.timeout,
     )

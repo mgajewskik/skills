@@ -10,33 +10,33 @@ Use `scripts/gl.py` first for MR read/review/create/update flows.
 
 ```bash
 # Read
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr list --reviewer me
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr info 123
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr diff 123
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr discussions 123 --unresolved-only
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr commits 123
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr list --reviewer me
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr info 123
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr diff 123
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr discussions 123 --unresolved-only
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr commits 123
 
 # Review comments
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr comment 123 "Overall looks good"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr line-comment 123 "Rename this" --file src/main.py --line 42
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr suggestion 123 "better_name()" --file src/main.py --line 42 --comment "Shorter"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr reply 123 <discussion_id> "Agreed"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr delete-comment 123 <note_id>
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr comment 123 "Overall looks good"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr line-comment 123 "Rename this" --file src/main.py --line 42
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr suggestion 123 "better_name()" --file src/main.py --line 42 --comment "Shorter"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr reply 123 <discussion_id> "Agreed"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr delete-comment 123 <note_id>
 
 # Draft review workflow
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr draft add 123 "Overall: needs tests"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr draft add 123 "Add guard clause" --file src/main.py --line 42
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr draft list 123
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr draft publish 123
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr draft add 123 "Overall: needs tests"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr draft add 123 "Add guard clause" --file src/main.py --line 42
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr draft list 123
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr draft publish 123
 
 # MR management
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr create "Feature title"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr update 123 --description-file /tmp/mr.md
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr assign 123 -r reviewer1 -a assignee1
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr approve 123
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr unapprove 123
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr resolve 123 <discussion_id>
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr merge 123 --squash
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr create "Feature title"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr update 123 --description-file /tmp/mr.md
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr assign 123 -r reviewer1 -a assignee1
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr approve 123
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr unapprove 123
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr resolve 123 <discussion_id>
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr merge 123 --squash
 ```
 
 ## glab Fallback

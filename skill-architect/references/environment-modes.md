@@ -8,15 +8,15 @@ Keep the architectural guidance stable and adapt the mechanics.
 
 The skill should still know how to discover, structure, test, and improve itself. What changes is how much automation, parallelism, and UI support are available.
 
-## OpenCode / Claude Code / Codex
+## Local Agent Runtimes
 
-OpenCode is the primary scripted mode supported by the bundled trigger-optimization scripts. Claude Code and Codex can still use the architecture, scaffolding, validation, and evaluation guidance, but they need a matching backend if you want automated trigger testing.
+Local runtimes can use the architecture, scaffolding, validation, and evaluation guidance. Automated trigger testing additionally requires a runner that implements the documented JSONL event contract.
 
 Use when available:
 
 - parallel runs and subagents for with-skill vs baseline comparisons
 - general scripts in `scripts/` for scaffolding, validation, packaging, and benchmark aggregation
-- OpenCode-backed scripts for description optimization and trigger evaluation
+- runtime-backed scripts for description optimization and trigger evaluation
 - packaging utilities
 - benchmark aggregation
 - file-based iteration workspaces
@@ -32,9 +32,9 @@ Preferred flow:
 
 ### Script portability
 
-- `init_skill.py`, `quick_validate.py`, `package_skill.py`, `generate_report.py`, and `aggregate_benchmark.py` are general enough for OpenCode, Codex, or other local workflows.
-- `run_eval.py`, `improve_description.py`, and `run_loop.py` are now OpenCode-first because they depend on `opencode run --agent smart --format json`.
-- To support Claude Code or another runtime, swap the backend invocation and skill-detection logic rather than changing the evaluation methodology.
+- `init_skill.py`, `quick_validate.py`, `package_skill.py`, `generate_report.py`, and `aggregate_benchmark.py` are runtime-independent.
+- `run_eval.py`, `improve_description.py`, and `run_loop.py` accept a JSONL runner command through `--runner-command` or `SKILL_EVAL_RUNNER`.
+- The command template supports `{prompt}`, `{agent}`, `{model}`, and `{directory}` placeholders. The runner must normalize skill-use and text events as documented in `description-optimization.md`.
 
 ## Headless or Remote Environments
 
@@ -47,7 +47,7 @@ If you cannot open a browser or graphical review artifact:
 
 Do not block progress just because a browser helper is unavailable.
 
-## Claude.ai or Single-Agent Environments
+## Single-Agent Environments
 
 If you do not have subagents or strong local execution:
 
@@ -65,7 +65,7 @@ If the environment lacks one or more utilities:
 - degrade gracefully to manual evaluation
 - keep schemas and directory layouts compatible so the workflow can be resumed later
 - preserve snapshots of the current skill before major edits
-- if nested `opencode run` trigger testing is unavailable, do manual trigger reviews instead of claiming scripted optimization
+- if a compatible nested runner is unavailable, do manual trigger reviews instead of claiming scripted optimization
 
 ## Packaging Guidance
 
@@ -81,5 +81,5 @@ If the skill directory might be read-only:
 
 - do not assume browser access
 - do not assume subagents exist
-- do not assume the current environment can run nested OpenCode processes
+- do not assume the current environment can run nested agent processes
 - explicitly state what verification level you achieved: manual, scripted, baseline-compared, or benchmarked

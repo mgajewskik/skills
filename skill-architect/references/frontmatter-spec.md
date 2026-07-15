@@ -2,7 +2,7 @@
 
 Based on the official Agent Skills specification: https://agentskills.io/specification
 
-Skills are an open standard designed to be portable across tools (OpenCode, Claude Code, etc.).
+Skills are an open standard designed to be portable across compatible agent runtimes.
 
 ## Required Fields
 

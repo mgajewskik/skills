@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import webbrowser
 from pathlib import Path
@@ -44,7 +45,8 @@ def run_loop(
     eval_set: list[dict],
     skill_path: Path,
     model: str | None,
-    agent: str,
+    agent: str | None,
+    runner_command: str,
     max_iterations: int,
     holdout: float,
     num_workers: int,
@@ -69,6 +71,7 @@ def run_loop(
             trigger_threshold,
             model,
             agent,
+            runner_command,
             current_description,
             timeout,
         )
@@ -82,6 +85,7 @@ def run_loop(
                 trigger_threshold,
                 model,
                 agent,
+                runner_command,
                 current_description,
                 timeout,
             )
@@ -121,6 +125,7 @@ def run_loop(
             model=model,
             history=[{"description": item["description"], "score": item["score"]} for item in history],
             agent=agent,
+            runner_command=runner_command,
         )
 
     return {
@@ -141,7 +146,12 @@ def main() -> int:
     parser.add_argument("--eval-set", required=True)
     parser.add_argument("--skill-path", required=True)
     parser.add_argument("--model", default=None)
-    parser.add_argument("--agent", default="smart")
+    parser.add_argument("--agent", default=None)
+    parser.add_argument(
+        "--runner-command",
+        default=os.environ.get("SKILL_EVAL_RUNNER"),
+        help="JSONL runner command template; supports {prompt}, {agent}, {model}, and {directory}",
+    )
     parser.add_argument("--max-iterations", type=int, default=5)
     parser.add_argument("--holdout", type=float, default=0.4)
     parser.add_argument("--num-workers", type=int, default=4)
@@ -153,6 +163,8 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--open-report", action="store_true")
     args = parser.parse_args()
+    if not args.runner_command:
+        parser.error("--runner-command or SKILL_EVAL_RUNNER is required")
 
     eval_items = validate_trigger_eval_set(json.loads(Path(args.eval_set).read_text()))
 
@@ -161,6 +173,7 @@ def main() -> int:
         Path(args.skill_path),
         args.model,
         args.agent,
+        args.runner_command,
         args.max_iterations,
         args.holdout,
         args.num_workers,

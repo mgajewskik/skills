@@ -66,17 +66,17 @@ If the eval set is weak, fix that before touching the description.
 
 ### Scripted pass
 
-Use the scripts in `scripts/` when you are in an OpenCode environment:
+Use the scripts in `scripts/` when the current runtime can provide a compatible JSONL runner:
 
 ```bash
-uv run scripts/run_eval.py --eval-set evals/trigger-evals.json --skill-path path/to/skill
-uv run scripts/improve_description.py --eval-results path/to/results.json --skill-path path/to/skill --model <model>
-uv run scripts/run_loop.py --eval-set evals/trigger-evals.json --skill-path path/to/skill --model <model>
+uv run scripts/run_eval.py --eval-set evals/trigger-evals.json --skill-path path/to/skill --runner-command '<runner> {prompt}'
+uv run scripts/improve_description.py --eval-results path/to/results.json --skill-path path/to/skill --runner-command '<runner> {prompt}'
+uv run scripts/run_loop.py --eval-set evals/trigger-evals.json --skill-path path/to/skill --runner-command '<runner> {prompt}'
 ```
 
-These scripts currently use `opencode run --agent smart --format json` to test whether the skill was actually invoked.
+The runner command must emit one JSON object per line. Trigger evaluation accepts a normalized skill event such as `{"type":"skill_use","name":"skill-name"}`. Description improvement accepts text events such as `{"type":"text","text":"..."}`. The command template supports `{prompt}`, `{agent}`, `{model}`, and `{directory}` placeholders and can also be supplied through `SKILL_EVAL_RUNNER`.
 
-For other runtimes, keep the same eval design and reporting logic, but replace the backend-specific invocation path or run the trigger review manually.
+If the runtime cannot provide that adapter contract, keep the same eval design and reporting logic but run the trigger review manually.
 
 Use the current session model when practical so the results match the user's actual runtime behavior.
 

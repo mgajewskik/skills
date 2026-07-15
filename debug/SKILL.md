@@ -7,7 +7,7 @@ description: "Explicit-only, production-safe debugging guidance that diagnoses p
 
 Diagnose with narrow evidence, preserve user control, and stop before remediation. Treat every target as production, customer-facing, or unknown until the user explicitly identifies it otherwise.
 
-This is behavioral guidance, not an enforcement switch. OpenCode 1.17.18 has no standard-skill frontmatter field that hard-disables implicit invocation, so the explicit-only trigger is best-effort and depends on following the description above.
+This is behavioral guidance, not an enforcement switch. Standard skill metadata has no portable field that hard-disables implicit invocation, so the explicit-only trigger is best-effort and depends on following the description above.
 
 ## Establish Safe Context
 
@@ -124,7 +124,7 @@ What it does:
 Impact:
 - Classification: read-only / low-risk reversible / state-changing / irreversible/high-impact.
 - Environment assumption: production unless explicitly stated otherwise.
-- Execution: Codex may run / ask-then-run / user-run only.
+- Execution: Agent may run / ask-then-run / user-run only.
 - Why: ...
 
 Risk:

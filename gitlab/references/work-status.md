@@ -5,10 +5,10 @@ Use this module when the user asks what needs attention across GitLab.
 ## Start with Python
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" actionable
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr list --reviewer me
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr list --author me
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" pipeline list --mine --status failed
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" actionable
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr list --reviewer me
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr list --author me
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" pipeline list --mine --status failed
 ```
 
 ## glab Fallback for Wider Activity Views

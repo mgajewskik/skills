@@ -63,7 +63,7 @@ position = {
 Get the diff to verify line exists:
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr diff 123 --path-filter "src/file.py"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr diff 123 --path-filter "src/file.py"
 ```
 
 Parse the diff output to find valid line numbers.
@@ -92,7 +92,7 @@ To find lines that are definitely commentable (added lines within a hunk):
 
 ```bash
 # Parse diff to show added lines with their new_line numbers
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" mr diff 123 | jq -r '.data.files[] | select(.new_path == "path/to/file.py") | .diff' | awk '
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" mr diff 123 | jq -r '.data.files[] | select(.new_path == "path/to/file.py") | .diff' | awk '
 /^@@/ { match($0, /\+([0-9]+)/, arr); new_line = arr[1] - 1; next }
 /^\+/ { new_line++; print new_line ": " $0 }
 /^[^+-@]/ { new_line++ }

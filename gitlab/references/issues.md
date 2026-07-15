@@ -10,19 +10,19 @@ Use `scripts/gl.py` first. Fall back to `glab issue ...` only if Python support 
 
 ```bash
 # Read
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue list
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue list --assignee me --state opened
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue info 45
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue list
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue list --assignee me --state opened
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue info 45
 
 # Create
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue create "Bug title" \
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue create "Bug title" \
   --description "Steps to reproduce" \
   --labels "bug,urgent" \
   --assignee me \
   --milestone "Sprint 5"
 
 # Update
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue update 45 \
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue update 45 \
   --title "Reproducible login bug" \
   --description "Updated description" \
   --add-label in-progress \
@@ -30,9 +30,9 @@ uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue update 45 \
   --assignee me
 
 # Comment / state changes
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue comment 45 "Working on this"
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue close 45
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue reopen 45
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue comment 45 "Working on this"
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue close 45
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue reopen 45
 ```
 
 ## glab Fallback
@@ -66,13 +66,13 @@ Need issue read/create/update/comment?
 Prefer:
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue update 45 --add-label in-progress --remove-label backlog
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue update 45 --add-label in-progress --remove-label backlog
 ```
 
 ### Assign to yourself
 
 ```bash
-uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" issue update 45 --assignee me
+uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" issue update 45 --assignee me
 ```
 
 ### Self-hosted or cross-repo fallback

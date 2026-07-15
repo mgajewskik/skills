@@ -77,6 +77,6 @@ Fix: Use `--project group/repo` explicitly.
 ## Common Fixes
 
 1. **Refresh auth**: `unset GITLAB_TOKEN && export GITLAB_TOKEN="new-token"`
-2. **Force project**: `uv run "$HOME/.config/opencode/skills/gitlab/scripts/gl.py" --project group/repo ...`
+2. **Force project**: `uv run "$HOME/.agents/skills/gitlab/scripts/gl.py" --project group/repo ...`
 3. **Check permissions**: Ensure token has `api` scope
 4. **Update diff refs**: Re-fetch MR diff before adding comments
