@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_DIR="$(dirname "$SCRIPT_DIR")/skills"
+SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 
 SKILLS=(
 	# Softaworks skills
