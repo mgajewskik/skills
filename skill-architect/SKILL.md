@@ -65,7 +65,7 @@ Validate the portable core with:
 uv run skill-architect/scripts/quick_validate.py <skill-directory>
 ```
 
-The validator requires PyYAML to already be available and never installs dependencies. If it is unavailable, inspect the frontmatter and package manually or use the target runtime's supported validator.
+The validator declares PyYAML as a script-local dependency. `uv` resolves and caches it on demand in an isolated environment; it does not require or modify the ambient Python environment. If dependency resolution is unavailable, inspect the frontmatter and package manually or use the target runtime's supported validator.
 
 ## Completion
 

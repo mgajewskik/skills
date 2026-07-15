@@ -24,7 +24,7 @@ Check directly:
 - scripts parse and execute against representative safe inputs
 - generated artifacts contain no placeholders, dead links, or speculative files
 
-Use the bundled validator for the portable core when PyYAML is already available:
+Use the bundled validator for the portable core; `uv` resolves its script-local PyYAML dependency on demand:
 
 ```bash
 uv run skill-architect/scripts/quick_validate.py <skill-directory>

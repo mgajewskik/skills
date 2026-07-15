@@ -1,4 +1,8 @@
 #!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["PyYAML>=6.0"]
+# ///
 """Validate the portable core of an Agent Skill package."""
 
 from __future__ import annotations
@@ -66,7 +70,7 @@ def validate_skill(skill_path: str | Path) -> tuple[bool, str]:
     if not content[match.end():].strip():
         return fail("SKILL.md must contain a non-empty Markdown body after frontmatter")
     if yaml is None:
-        return fail("PyYAML is required for validation but is not installed; install it explicitly or validate with the target runtime")
+        return fail("PyYAML is required for validation; run this script with uv or validate with the target runtime")
 
     try:
         data = yaml.safe_load(match.group(1))
