@@ -1,112 +1,119 @@
 #!/usr/bin/env -S uv run --script
-# /// script
-# dependencies = [
-#   "pyyaml",
-# ]
-# ///
-"""Quick validation script for skills."""
+"""Validate the portable core of an Agent Skill package."""
 
-import sys
+from __future__ import annotations
+
 import re
-import yaml
+import sys
 from pathlib import Path
+from typing import Any
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 
-def validate_skill(skill_path):
-    """Basic validation of a skill"""
-    skill_path = Path(skill_path)
+ALLOWED_FIELDS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+FRONTMATTER_PATTERN = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 
-    # Check skill folder exists
-    if not skill_path.exists() or not skill_path.is_dir():
-        return False, f"Skill directory not found: {skill_path}"
 
-    # Check SKILL.md exists
-    skill_md = skill_path / "SKILL.md"
-    if not skill_md.exists():
-        return False, "SKILL.md not found"
+def fail(message: str) -> tuple[bool, str]:
+    return False, message
 
-    # Read and validate frontmatter
-    content = skill_md.read_text()
-    if not content.startswith("---"):
-        return False, "No YAML frontmatter found"
 
-    # Extract frontmatter
-    match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-    if not match:
-        return False, "Invalid frontmatter format"
+def validate_optional_fields(data: dict[str, Any]) -> tuple[bool, str] | None:
+    if "license" in data and not isinstance(data["license"], str):
+        return fail("'license' must be a string")
 
-    frontmatter_text = match.group(1)
+    if "compatibility" in data:
+        compatibility = data["compatibility"]
+        if not isinstance(compatibility, str):
+            return fail("'compatibility' must be a string")
+        if not 1 <= len(compatibility) <= 500:
+            return fail("'compatibility' must contain 1 to 500 characters")
 
-    # Parse YAML frontmatter
+    if "metadata" in data:
+        metadata = data["metadata"]
+        if not isinstance(metadata, dict):
+            return fail("'metadata' must be a mapping")
+        if any(not isinstance(key, str) or not isinstance(value, str) for key, value in metadata.items()):
+            return fail("'metadata' keys and values must be strings")
+
+    if "allowed-tools" in data and not isinstance(data["allowed-tools"], str):
+        return fail("'allowed-tools' must be a string")
+    return None
+
+
+def validate_skill(skill_path: str | Path) -> tuple[bool, str]:
+    path = Path(skill_path)
+    if not path.is_dir():
+        return fail(f"skill directory not found: {path}")
+
+    skill_md = path / "SKILL.md"
+    if not skill_md.is_file():
+        return fail("SKILL.md not found")
+
     try:
-        frontmatter = yaml.safe_load(frontmatter_text)
-        if not isinstance(frontmatter, dict):
-            return False, "Frontmatter must be a YAML dictionary"
-    except yaml.YAMLError as e:
-        return False, f"Invalid YAML in frontmatter: {e}"
+        content = skill_md.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return fail(f"cannot read SKILL.md: {exc}")
 
-    ALLOWED_PROPERTIES = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+    match = FRONTMATTER_PATTERN.match(content)
+    if not match:
+        return fail("SKILL.md must start with YAML frontmatter delimited by '---'")
+    if not content[match.end():].strip():
+        return fail("SKILL.md must contain a non-empty Markdown body after frontmatter")
+    if yaml is None:
+        return fail("PyYAML is required for validation but is not installed; install it explicitly or validate with the target runtime")
 
-    # Check for unexpected properties (excluding nested keys under metadata)
-    unexpected_keys = set(frontmatter.keys()) - ALLOWED_PROPERTIES
-    if unexpected_keys:
-        return False, (
-            f"Unexpected key(s) in SKILL.md frontmatter: {', '.join(sorted(unexpected_keys))}. "
-            f"Allowed properties are: {', '.join(sorted(ALLOWED_PROPERTIES))}"
+    try:
+        data = yaml.safe_load(match.group(1))
+    except yaml.YAMLError as exc:
+        return fail(f"invalid YAML frontmatter: {exc}")
+    if not isinstance(data, dict):
+        return fail("frontmatter must be a YAML mapping")
+
+    unknown = set(data) - ALLOWED_FIELDS
+    if unknown:
+        return fail(
+            f"unknown portable frontmatter field(s): {', '.join(sorted(map(str, unknown)))}; "
+            "validate runtime-specific fields with the target runtime"
         )
 
-    if "name" not in frontmatter:
-        return False, "Missing 'name' in frontmatter"
-    if "description" not in frontmatter:
-        return False, "Missing 'description' in frontmatter"
+    for field in ("name", "description"):
+        if field not in data:
+            return fail(f"missing required field: '{field}'")
+        if not isinstance(data[field], str):
+            return fail(f"'{field}' must be a string")
 
-    name = frontmatter.get("name", "")
-    if not isinstance(name, str):
-        return False, f"Name must be a string, got {type(name).__name__}"
-    name = name.strip()
-    if name:
-        if not re.match(r"^[a-z0-9-]+$", name):
-            return False, f"Name '{name}' should be kebab-case (lowercase letters, digits, and hyphens only)"
-        if name.startswith("-") or name.endswith("-") or "--" in name:
-            return False, f"Name '{name}' cannot start/end with hyphen or contain consecutive hyphens"
-        if len(name) > 64:
-            return False, f"Name is too long ({len(name)} characters). Maximum is 64 characters."
-        if skill_path.name != name:
-            return False, f"Directory name '{skill_path.name}' must match skill name '{name}'"
+    name = data["name"]
+    if not 1 <= len(name) <= 64:
+        return fail("'name' must contain 1 to 64 characters")
+    if not NAME_PATTERN.fullmatch(name):
+        return fail("'name' must be lowercase kebab-case without leading, trailing, or consecutive hyphens")
+    if path.name != name:
+        return fail(f"directory name '{path.name}' must exactly match skill name '{name}'")
 
-    description = frontmatter.get("description", "")
-    if not isinstance(description, str):
-        return False, f"Description must be a string, got {type(description).__name__}"
-    description = description.strip()
-    if description:
-        if "<" in description or ">" in description:
-            return False, "Description cannot contain angle brackets (< or >)"
-        if len(description) > 1024:
-            return False, f"Description is too long ({len(description)} characters). Maximum is 1024 characters."
+    description = data["description"]
+    if not 1 <= len(description) <= 1024 or not description.strip():
+        return fail("'description' must contain 1 to 1024 non-whitespace characters")
 
-    compatibility = frontmatter.get("compatibility", "")
-    if compatibility:
-        if not isinstance(compatibility, str):
-            return False, f"Compatibility must be a string, got {type(compatibility).__name__}"
-        if len(compatibility) > 500:
-            return False, f"Compatibility is too long ({len(compatibility)} characters). Maximum is 500 characters."
+    optional_error = validate_optional_fields(data)
+    if optional_error:
+        return optional_error
+    return True, "Skill is valid"
 
-    if content.count("---") < 2:
-        return False, "Frontmatter delimiters are incomplete"
 
-    for reserved_dir in ("references", "scripts", "agents", "assets"):
-        reserved_path = skill_path / reserved_dir
-        if reserved_path.exists() and not reserved_path.is_dir():
-            return False, f"{reserved_dir} exists but is not a directory"
-
-    return True, "Skill is valid!"
+def main(argv: list[str]) -> int:
+    if len(argv) != 1:
+        print("Usage: uv run skill-architect/scripts/quick_validate.py <skill-directory>", file=sys.stderr)
+        return 2
+    valid, message = validate_skill(argv[0])
+    print(message, file=sys.stdout if valid else sys.stderr)
+    return 0 if valid else 1
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python quick_validate.py <skill_directory>")
-        sys.exit(1)
-
-    valid, message = validate_skill(sys.argv[1])
-    print(message)
-    sys.exit(0 if valid else 1)
+    raise SystemExit(main(sys.argv[1:]))

@@ -1,161 +1,115 @@
 #!/usr/bin/env -S uv run --script
-"""Initialize a new skill with a progressive-disclosure skeleton."""
+"""Create a minimal, portable Agent Skill scaffold."""
 
 from __future__ import annotations
 
+import argparse
+import json
+import re
+import shutil
 import sys
 from pathlib import Path
 
 
-SKILL_TEMPLATE = """---
-name: {skill_name}
-description: "Use this skill for [WHAT]. Trigger it when the user needs [WHEN], especially around [boundary terms and scenarios]."
+NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+RESOURCE_NAMES = frozenset({"references", "scripts", "assets"})
+
+
+def valid_name(value: str) -> str:
+    if not value:
+        raise argparse.ArgumentTypeError("name must not be empty")
+    if len(value) > 64:
+        raise argparse.ArgumentTypeError("name must be at most 64 characters")
+    if not NAME_PATTERN.fullmatch(value):
+        raise argparse.ArgumentTypeError(
+            "name must be one lowercase kebab-case component with no separators, "
+            "leading/trailing hyphens, or consecutive hyphens"
+        )
+    return value
+
+
+def valid_description(value: str) -> str:
+    if not value.strip():
+        raise argparse.ArgumentTypeError("description must not be empty")
+    if len(value) > 1024:
+        raise argparse.ArgumentTypeError("description must be at most 1024 characters")
+    return value
+
+
+def requested_resources(value: str) -> tuple[str, ...]:
+    names = value.split(",")
+    if not names or any(not name for name in names):
+        raise argparse.ArgumentTypeError("resources must be a comma-separated list")
+    unknown = set(names) - RESOURCE_NAMES
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"unsupported resource(s): {', '.join(sorted(unknown))}; "
+            "choose from references,scripts,assets"
+        )
+    if len(names) != len(set(names)):
+        raise argparse.ArgumentTypeError("resources must not contain duplicates")
+    return tuple(names)
+
+
+def title_for(name: str) -> str:
+    return " ".join(part.capitalize() for part in name.split("-"))
+
+
+def skill_markdown(name: str, description: str) -> str:
+    quoted_description = json.dumps(description, ensure_ascii=False)
+    return f"""---
+name: {name}
+description: {quoted_description}
 ---
 
-# {skill_title}
+# {title_for(name)}
 
-One-sentence statement of what this skill helps Claude do.
+## Instructions
 
-## Start Here
-
-Classify the request before loading more context.
-
-- Architecture/design request -> read `references/architecture.md`
-- Evaluation/refinement request -> read `references/evaluation.md`
-- Environment-specific mechanics -> read `references/environment.md`
-
-Do not load every reference file at once.
-
-## Core Workflow
-
-1. Identify user intent and trigger boundary
-2. Load the minimal reference material needed
-3. Execute the workflow
-4. Verify the result
-5. Report outcome and next step
-
-## Guardrails
-
-- Keep this file compact
-- Push deep detail into `references/`
-- Move repeated deterministic work into `scripts/`
-- Add `agents/` only if specialist grading or comparison is useful
-"""
-
-ARCHITECTURE_REFERENCE = """# Architecture
-
-Document the discovery questions, archetype choice, structure decisions, and failure modes for this skill.
-
-Recommended sections:
-
-1. Trigger boundary
-2. Input/output contract
-3. Workflow patterns
-4. Anti-patterns
-5. Split-vs-one-skill decision
-"""
-
-EVALUATION_REFERENCE = """# Evaluation
-
-Describe how to test this skill.
-
-Recommended sections:
-
-1. Representative prompts
-2. Baseline choice
-3. Assertions worth checking
-4. Human review criteria
-5. Iteration signals
-"""
-
-ENVIRONMENT_REFERENCE = """# Environment
-
-Note any environment-specific adaptations:
-
-- tools required
-- browser/headless differences
-- packaging notes
-- fallback workflow when automation is unavailable
-"""
-
-EVALS_TEMPLATE = """{{
-  "skill_name": "{skill_name}",
-  "evals": [
-    {{
-      "id": 1,
-      "prompt": "Realistic user request here",
-      "expected_output": "What success looks like",
-      "files": [],
-      "expectations": []
-    }}
-  ]
-}}
-"""
-
-TRIGGER_EVALS_TEMPLATE = """[
-  {
-    "query": "I need help creating a reusable skill for triaging support tickets with clear trigger boundaries.",
-    "should_trigger": true
-  },
-  {
-    "query": "Write a Python function that sums two numbers.",
-    "should_trigger": false
-  }
-]
+- Define the workflow this skill must follow.
+- State material guardrails, safe defaults, and failure behavior.
+- Verify the result against concrete success criteria before reporting completion.
 """
 
 
-def title_case_skill_name(skill_name: str) -> str:
-    return " ".join(word.capitalize() for word in skill_name.split("-"))
+def init_skill(name: str, base_path: Path, description: str, resources: tuple[str, ...]) -> Path:
+    destination = base_path / name
+    if destination.exists():
+        raise FileExistsError(f"destination already exists: {destination}")
 
-
-def write_file(path: Path, content: str, executable: bool = False) -> None:
-    path.write_text(content)
-    if executable:
-        path.chmod(0o755)
-
-
-def init_skill(skill_name: str, destination: str) -> Path:
-    skill_dir = Path(destination).resolve() / skill_name
-    if skill_dir.exists():
-        raise FileExistsError(f"Skill directory already exists: {skill_dir}")
-
-    skill_dir.mkdir(parents=True)
-    for subdir in ("references", "scripts", "agents", "assets", "evals"):
-        (skill_dir / subdir).mkdir()
-
-    write_file(
-        skill_dir / "SKILL.md",
-        SKILL_TEMPLATE.format(skill_name=skill_name, skill_title=title_case_skill_name(skill_name)),
-    )
-    write_file(skill_dir / "references" / "architecture.md", ARCHITECTURE_REFERENCE)
-    write_file(skill_dir / "references" / "evaluation.md", EVALUATION_REFERENCE)
-    write_file(skill_dir / "references" / "environment.md", ENVIRONMENT_REFERENCE)
-    write_file(skill_dir / "evals" / "evals.json", EVALS_TEMPLATE.format(skill_name=skill_name))
-    write_file(skill_dir / "evals" / "trigger-evals.json", TRIGGER_EVALS_TEMPLATE)
-    write_file(skill_dir / "scripts" / "README.txt", "Add deterministic helpers here when repeated work emerges.\n")
-
-    return skill_dir
-
-
-def main() -> int:
-    if len(sys.argv) < 4 or sys.argv[2] != "--path":
-        print("Usage: uv run scripts/init_skill.py <skill-name> --path <directory>")
-        return 1
-
-    skill_name = sys.argv[1]
-    destination = sys.argv[3]
+    destination.mkdir(parents=True)
     try:
-        skill_dir = init_skill(skill_name, destination)
-    except Exception as exc:
-        print(f"Error: {exc}")
-        return 1
+        (destination / "SKILL.md").write_text(skill_markdown(name, description), encoding="utf-8")
+        for resource in resources:
+            (destination / resource).mkdir()
+    except BaseException as error:
+        try:
+            shutil.rmtree(destination)
+        except OSError as cleanup_error:
+            raise RuntimeError(
+                f"initialization failed and partial destination could not be removed: {destination}"
+            ) from cleanup_error
+        raise error
+    return destination
 
-    print(f"Initialized skill at {skill_dir}")
-    print("Next steps:")
-    print("1. Fill in the trigger boundary and architecture notes")
-    print("2. Add task evals to evals/evals.json and trigger evals to evals/trigger-evals.json")
-    print("3. Run uv run scripts/quick_validate.py <skill-dir> before packaging")
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("name", type=valid_name)
+    parser.add_argument("--path", required=True, type=Path, help="parent directory for the skill")
+    parser.add_argument("--description", required=True, type=valid_description)
+    parser.add_argument("--resources", type=requested_resources, default=())
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    try:
+        destination = init_skill(args.name, args.path, args.description, args.resources)
+    except (FileExistsError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Initialized skill at {destination}")
     return 0
 
 
