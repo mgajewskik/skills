@@ -1,6 +1,6 @@
 ---
 name: writing
-description: "Draft, rewrite, critique, copyedit, or coach prose for humans to read: email, chat, LinkedIn, blogs, docs, READMEs, PRs, commits, issues, ADRs, design docs, incident updates, postmortems, status updates, executive summaries, instructions, and general writing. Use when the user asks for writing, editing, feedback, clearer/concise prose, Strunk-style polish, anti-AI-slop cleanup, or reusable writing coaching. Preserve meaning, evidence, constraints, and voice while improving reader-task fit."
+description: "Draft, rewrite, critique, copyedit, or coach prose for humans to read. Use only when the user explicitly invokes `$writing`, says `use the writing skill`, or clearly names `writing` as the desired skill; do not auto-compete with ordinary writing or editing requests. Preserve meaning, evidence, constraints, and voice while improving reader-task fit."
 ---
 
 # Writing
