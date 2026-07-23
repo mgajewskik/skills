@@ -5,7 +5,7 @@ description: "Explicit-only, production-safe debugging guidance that diagnoses p
 
 # Debug Safely, One Probe at a Time
 
-Diagnose with narrow evidence, preserve user control, and stop before remediation. Treat every target as production, customer-facing, or unknown until the user explicitly identifies it otherwise.
+Diagnose with narrow evidence, preserve user control, and keep true mutations user-run. Treat every target as production, customer-facing, or unknown until the user explicitly identifies it otherwise.
 
 This is behavioral guidance, not an enforcement switch. Standard skill metadata has no portable field that hard-disables implicit invocation, so the explicit-only trigger is best-effort and depends on following the description above.
 
@@ -26,7 +26,7 @@ Do not infer that a target is local, non-production, or safe from the working di
 
 ## Run the Diagnostic Loop
 
-For each debugging turn:
+For each diagnostic loop iteration:
 
 1. State the current goal.
 2. State the strongest hypothesis and the most credible competing alternatives.
@@ -39,40 +39,42 @@ For each debugging turn:
 
 Never batch independent probes. Never hide exploratory actions inside a compound command.
 
-## Default to Guided Mode
+## Default to Autonomous Read-Only Diagnosis
 
-Unless the user explicitly authorizes autonomous execution for the current diagnosis and target:
+Explicit invocation of this skill authorizes a sequential read-only diagnostic loop for the current diagnosis and exact target once the safe context above is established. It does not authorize any true mutation.
 
-- Read narrow local files, perform focused local searches, and consult relevant documentation autonomously when allowed.
-- Do not execute shell or CLI probes.
-- Suggest exactly one bounded shell or CLI probe.
-- Explain what it does, why it is the next probe, the expected signal, its impact class, and the minimum redacted output to return.
-- Wait for the user's output before proposing another command.
+In the default mode:
 
-Treat a new user message that does not contain the requested output as new context, not permission to advance through multiple probes.
+1. Briefly explain why each non-shell file read, search, or documentation lookup is needed.
+2. Explain one bounded shell or CLI probe before execution.
+3. Execute it only when it is classified as read-only and higher-level policy permits execution.
+4. Interpret its output before selecting another probe.
+5. Continue only while the next read-only probe can materially improve or falsify the diagnosis.
 
-## Use Autonomous Mode Only When Explicitly Authorized
+Do not ask for separate autonomous-mode approval. Narrow read-only probes may observe an identified local, remote, staging, production, or customer-facing target when higher-level policy permits it and the output can be safely bounded and redacted.
 
-Require clear authorization that names or unambiguously identifies both the current diagnosis and its exact target. General requests such as "debug this," prior-session approval, or blanket approval do not authorize autonomous mode.
-
-In autonomous mode:
-
-1. Explain one probe before execution.
-2. Execute only that one probe.
-3. Interpret its output.
-4. Decide whether another probe is still safe and necessary.
-
-Do not issue parallel probes or chain independent actions. End autonomous mode immediately when:
+Do not issue parallel probes or chain independent actions. Pause or end the read-only loop when:
 
 - the target or scope changes;
 - root cause is established;
-- new evidence merely repeats existing evidence;
-- a probe fails unexpectedly;
+- additional evidence would be repetitive or unlikely to change the diagnosis;
+- a probe failure makes the next probe's effects or scope uncertain;
 - the next action is broad, sensitive, costly, ambiguous, or requires mutation;
-- a target becomes staging, production, customer-facing, or unknown for a command the agent is not allowed to run;
+- a safe target or output boundary cannot be established;
 - the user revokes or narrows authorization.
 
-After autonomy ends, return to guided mode or ask for the exact permission required by the next action.
+Interpret an unexpected probe failure before stopping. Continue with another bounded read-only probe only when it can still materially change the diagnosis.
+
+## Use Guided Mode When Requested
+
+If the user asks for suggest-only, guided, or no-execution behavior:
+
+- Continue allowed narrow non-shell reads only after briefly explaining their purpose.
+- Do not execute shell or CLI probes.
+- Suggest exactly one bounded probe using the applicable explanation template.
+- Wait for the user's output before proposing another command.
+
+Treat a new user message that does not contain the requested output as new context, not permission to advance through multiple probes.
 
 ## Classify Effects Conservatively
 
@@ -100,15 +102,41 @@ Allow a pipeline only when every later stage solely filters, selects, redacts, c
 
 ## Explain Each Probe Adaptively
 
-For a simple, narrow local read, keep the explanation concise but include:
+Before every read-only shell or CLI probe, use this compact learning format:
 
-- the single command;
-- what it reads and why it is the next probe;
-- expected useful signal;
-- impact classification;
-- minimal output to return and required redactions.
+````markdown
+Command:
+```bash
+<command>
+```
 
-For every compound, remote, modifying, sensitive, or otherwise non-trivial command, use the repository's full format exactly. Do not abbreviate, rename, merge, or omit its headings or fields, even when the command itself is simple:
+What it does:
+- `<executable>`: ...
+- `<argument-or-flag>`: ...
+- `<operator-or-pipeline-stage>`: ...
+
+Why this probe:
+- Current goal: ...
+- Intuition: ...
+
+Expected signal:
+- Supports the hypothesis: ...
+- Weakens or redirects the hypothesis: ...
+````
+
+Explain every executable, argument, flag, operator, redirection, environment variable, and pipeline stage that appears. Omit placeholder bullets that do not apply. If higher-level policy requires fuller disclosure for a read-only command, follow the stricter format.
+
+After execution, interpret the evidence before selecting another probe:
+
+```markdown
+Observed result:
+- Signal: ...
+
+Interpretation:
+- Effect on the diagnosis: ...
+```
+
+For every true modifying, sensitive, or otherwise policy-required command, use the repository's full format exactly. Do not abbreviate, rename, merge, or omit its headings or fields, even when the command itself is simple:
 
 ````markdown
 Command:
@@ -149,46 +177,36 @@ Do not present a command without its explanation.
 
 ## Enforce Permission Boundaries
 
-Require a fresh permission checkpoint before every modifying command. Bind permission to the exact command text, arguments, target, and current turn.
+Exhaust meaningful read-only alternatives before proposing a modifying diagnostic probe.
 
-The following do not count as permission for a modifying command:
+Every `low-risk reversible`, `state-changing`, or `irreversible/high-impact` command is user-run only, in every environment. The agent must never execute it. Present one exact command at a time using the full format above, set `Execution` to `user-run only`, and wait for the user to report its output or result.
 
-- the initial debugging request;
-- autonomous-mode authorization;
-- blanket or standing approval;
-- approval from a prior turn;
-- approval for a similar but changed command;
-- approval for a retry, even when the text appears unchanged.
+The initial debugging request, read-only-loop authorization, blanket approval, prior approval, or approval for a similar command never authorizes the agent to execute a true mutation. If the proposed command text, arguments, or target changes, explain the new exact command again before the user runs it.
 
-After exact-command approval:
-
-- Run a `low-risk reversible` or `state-changing` command only when the target is explicitly identified as local, dev, or sandbox and higher-level policy allows execution.
-- Keep staging, production, customer-facing, and unknown-target modifying commands user-run.
-- Keep destructive, irreversible, security-sensitive, and high-blast-radius commands user-run in every environment, including local.
-- Re-check target and effects immediately before execution.
-
-During this diagnostic workflow, never install packages, restart or reload services, edit code or configuration, clean generated artifacts, or delegate diagnosis. A separate remediation request exits this skill's workflow; handle it independently under higher-level policy rather than relaxing these debugging guardrails.
+The agent must never install packages, restart or reload services, edit code or configuration, clean generated artifacts, apply remediation, or delegate diagnosis. It may explain a necessary user-run diagnostic mutation, and after the remediation gate below it may explain the user's chosen user-run remediation.
 
 ### Disposable Local Test and Build Exception
 
-Autonomous mode may run one test or build command that writes only ignored, disposable local artifacts when current repository evidence proves all of the following:
+The read-only loop may run one test or build command that writes only ignored, disposable local artifacts when current repository evidence proves all of the following:
 
 - the target is local;
 - every generated path is ignored and disposable;
 - no service, dependency, lockfile, source file, configuration, credential store, remote cache, or external system is changed;
 - the command is bounded and affordable.
 
-Disclose the expected writes before execution. If any condition is uncertain, stop and request exact-command permission. Never clean the artifacts automatically.
+Use the compact learning format and add an `Expected local writes` section that names the ignored, disposable paths before execution. If any condition is uncertain, do not execute the command; handle it as a user-run modifying diagnostic probe using the full format. Never clean the artifacts automatically.
 
-## Stop at Diagnosis
+## Diagnose Before Remediation
 
-Conclude when the evidence supports a root cause or when further diagnosis cannot safely distinguish the remaining hypotheses. Provide:
+Conclude the diagnostic phase when the evidence supports a root cause or when further diagnosis cannot safely distinguish the remaining hypotheses. Provide:
 
 - the evidence-backed diagnosis and confidence;
 - unresolved uncertainty;
 - bounded remediation options with tradeoffs, risk, and verification ideas.
 
-Do not apply a fix, edit code or configuration, restart anything, install anything, begin cleanup, or delegate diagnosis. Remediation requires a separate user request, exits this skill's workflow, and remains subject to higher-level safety policy.
+Wait for the user to choose a remediation option before presenting an exact remediation action. For a command-based remediation, present one exact command with the full format and require the user to run it. For an inherently manual remediation, provide equivalent full-impact guidance rather than inventing a shell command.
+
+Never apply the remediation. After the user reports running a diagnostic mutation or chosen remediation, interpret the reported result and resume explained read-only verification within the same diagnosis and target. A changed target requires fresh safe-context intake.
 
 ## End Every Debugging Response with Status
 
@@ -203,3 +221,5 @@ Status:
 ```
 
 Use `none; diagnosis complete` as the next probe when no further diagnostic command is justified. Never include secrets, sensitive raw output, or customer identifiers in the footer.
+
+When applicable, use `awaiting user choice`, `awaiting user-run command output`, or `read-only verification` as the next-probe state.
