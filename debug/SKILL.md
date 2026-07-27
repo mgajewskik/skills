@@ -32,7 +32,7 @@ For each diagnostic loop iteration:
 2. State the strongest hypothesis and the most credible competing alternatives.
 3. Summarize the evidence already available, separating observation from inference.
 4. Select the smallest, safest probe that can strengthen or falsify a hypothesis.
-5. Explain that probe before it is run.
+5. Explain that probe before it is run unless it qualifies for the workspace-research exception below.
 6. Handle the probe according to the selected mode.
 7. Interpret its output before choosing another probe.
 8. Update the hypothesis ranking.
@@ -45,7 +45,7 @@ Explicit invocation of this skill authorizes a sequential read-only diagnostic l
 
 In the default mode:
 
-1. Briefly explain why each non-shell file read, search, or documentation lookup is needed.
+1. Explore the current workspace under the workspace-research exception when repository context can narrow the diagnosis.
 2. Explain one bounded shell or CLI probe before execution.
 3. Execute it only when it is classified as read-only and higher-level policy permits execution.
 4. Interpret its output before selecting another probe.
@@ -69,7 +69,7 @@ Interpret an unexpected probe failure before stopping. Continue with another bou
 
 If the user asks for suggest-only, guided, or no-execution behavior:
 
-- Continue allowed narrow non-shell reads only after briefly explaining their purpose.
+- Continue allowed non-shell workspace research without per-read explanations, then provide the workspace-research summary.
 - Do not execute shell or CLI probes.
 - Suggest exactly one bounded probe using the applicable explanation template.
 - Wait for the user's output before proposing another command.
@@ -98,11 +98,35 @@ Apply these rules to every proposed or executed command:
 - Do not repeat sensitive evidence in summaries; describe only the diagnostic signal.
 - Pause when a safe filter or target boundary cannot be established.
 
-Allow a pipeline only when every later stage solely filters, selects, redacts, counts, or limits the output of one observational probe. Explain every pipeline stage. Do not combine independent probes with `&&`, `;`, `||`, command substitution, subshells, or equivalent chaining.
+Allow a pipeline only when every later stage solely filters, selects, redacts, counts, or limits the output of one observational probe. Explain every pipeline stage unless the command qualifies for the workspace-research exception below. Do not combine independent probes with `&&`, `;`, `||`, command substitution, subshells, or equivalent chaining.
 
 ## Explain Each Probe Adaptively
 
-Before every read-only shell or CLI probe, use this compact learning format:
+### Workspace Research Exception
+
+Explore the current workspace freely without a per-command template or explanation when every action:
+
+- stays within the current workspace and its Git metadata;
+- only lists, reads, or searches source code, tests, documentation, configuration, manifests, lockfiles, diffs, history, or repository metadata;
+- is known to be read-only;
+- does not execute project code, tests, builds, linters, generators, package managers, containers, or scripts;
+- does not inspect running processes, services, hosts, networks, clusters, cloud resources, or other live systems;
+- does not access paths outside the current workspace or contact external systems.
+
+This is a presentation exception only. Existing scope, sensitive-data, and output-bounding rules still apply. If any condition is uncertain, use the normal probe template.
+
+Do not narrate or template individual workspace-research actions. Whenever the workspace-research phase ends, summarize it once, including when the research establishes the diagnosis, selects a real diagnostic probe, or cannot safely continue:
+
+```markdown
+Codebase research:
+- Scope inspected: ...
+- Relevant findings: ...
+- Diagnostic impact: ...
+```
+
+After the summary, use the applicable command template for each actual diagnostic probe, if any.
+
+Except for qualifying workspace-research actions, before every read-only shell or CLI probe use this compact learning format:
 
 ````markdown
 Command:
