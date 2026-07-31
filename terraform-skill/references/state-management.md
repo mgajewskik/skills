@@ -16,6 +16,7 @@ This document provides detailed guidance on state management, from remote backen
 5. [Multi-Team State Isolation](#multi-team-state-isolation)
 6. [State Recovery & Troubleshooting](#state-recovery--troubleshooting)
 7. [State Best Practices Summary](#state-best-practices-summary)
+   - [Safe Destroy Protocol](#safe-destroy-protocol)
 
 ---
 
@@ -36,6 +37,34 @@ This document provides detailed guidance on state management, from remote backen
 - ✅ State versioning and backup
 - ✅ Team collaboration
 - ✅ Audit logging
+
+### Choosing a Remote Backend
+
+| Backend | Use when |
+|---------|----------|
+| `s3` | AWS workloads, existing AWS state |
+| `azurerm` | Azure workloads |
+| `gcs` | GCP workloads |
+| `cloud` / TF Cloud / HCP | hosted state, run management, policy enforcement |
+
+Locking mechanism per backend: see [Backend Locking Support](#backend-locking-support) below.
+
+### Cross-cloud equivalents
+
+| Concern | AWS | Azure | GCP |
+|---------|-----|-------|-----|
+| Backend block | `backend "s3" { bucket, key, region, encrypt, use_lockfile }` | `backend "azurerm" { resource_group_name, storage_account_name, container_name, key }` | `backend "gcs" { bucket, prefix }` |
+| Access control | IAM policy on bucket/role | RBAC role assignment on storage account/container | IAM binding on the bucket |
+| Remote-state data source | `terraform_remote_state` (backend `s3`) | `terraform_remote_state` (backend `azurerm`) | `terraform_remote_state` (backend `gcs`) |
+
+### Bootstrap parity
+
+| Concern | AWS | Azure | GCP |
+|---------|-----|-------|-----|
+| Versioning | S3 bucket versioning | storage account / blob versioning | GCS object versioning |
+| Encryption at rest | explicit: SSE / KMS (`aws_s3_bucket_server_side_encryption_configuration`) | default-on (SSE; optional CMK) | default-on (Google-managed; optional CMEK) |
+| Public-access block | `aws_s3_bucket_public_access_block` | `allow_nested_items_to_be_public = false` + private container | uniform bucket-level access + public access prevention |
+| Bootstrap auth | IAM / OIDC | RBAC / federated credentials | IAM / Workload Identity Federation |
 
 ### AWS S3 Backend (Recommended)
 
@@ -1764,6 +1793,16 @@ rm .terraform/terraform.tfstate.lock.info  # ❌ Dangerous
 - High blast radius
 ✅ **Instead:** Split by component/team/environment
 
+### Safe Destroy Protocol
+
+A targeted destroy can cascade far beyond its targets via implicit dependencies. Always follow this sequence:
+
+1. Run `terraform plan -destroy [-target=...]` - never skip straight to destroy
+2. Read **every** resource under "will be destroyed", not just the targeted ones
+3. ⚠️ Watch for `for_each` resources fed by a local that references a targeted resource - all instances become implicit dependents (e.g. targeting an `aws_eip` that is referenced in a `locals {}` block used by a `for_each` record resource will destroy **all** those records)
+4. Get explicit user confirmation of the full list before proceeding
+5. ❌ Never use `-auto-approve` on destroy in production
+
 ### LLM Mistake Checklist — State Management
 
 Common model mistakes to correct before returning state-related recommendations:
@@ -1776,6 +1815,7 @@ Common model mistakes to correct before returning state-related recommendations:
 - mixes prod and non-prod in the same backend key
 - recommends workspace-only isolation as a substitute for backend-level IAM separation
 - writes DynamoDB-lock configuration on Terraform 1.10+ instead of using `use_lockfile = true` on the S3 backend
+- runs `terraform destroy -auto-approve` or skips `plan -destroy` before a targeted destroy - missing implicit dependents pulled in via shared locals
 - reads via `terraform_remote_state` within a single team's stack instead of using module outputs (see [module-patterns.md](module-patterns.md#3-use-terraform_remote_state-sparingly--only-at-true-ownership-boundaries))
 - omits the rollback/recovery note for destructive state operations
 

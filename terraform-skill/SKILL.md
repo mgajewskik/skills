@@ -1,10 +1,10 @@
 ---
 name: terraform-skill
-description: Use when writing, reviewing, or debugging Terraform/OpenTofu modules, tests, CI, scans, or state ops — diagnoses failure mode (identity churn, secrets, blast radius, CI drift, state corruption) with version-aware guards.
+description: Use when writing, reviewing, or debugging Terraform/OpenTofu modules, tests, CI, scans, or state ops - diagnoses failure mode (identity churn, secrets, blast radius, CI drift, state corruption) with version-aware guards.
 license: Apache-2.0
 metadata:
   author: Anton Babenko
-  version: 1.8.0
+  version: 1.17.1
 ---
 
 # Terraform Skill for Claude
@@ -23,6 +23,8 @@ Every Terraform/OpenTofu response must include:
 
 Never recommend direct production apply without a reviewed plan artifact and approval.
 
+Never run `terraform destroy` (targeted or full) without first running `terraform plan -destroy` and showing the user every resource that will be deleted — including implicit dependents pulled in via locals or `for_each`. Get explicit confirmation before proceeding. Never use `-auto-approve` on destroy.
+
 ## Workflow
 
 1. **Capture execution context** — runtime+version, provider(s), backend, execution path, environment criticality.
@@ -40,12 +42,16 @@ Never recommend direct production apply without a reviewed plan artifact and app
 | **Identity churn** | Resource addresses shift after refactor, `count` index churn, missing `moved` blocks | [Code Patterns: count vs for_each](references/code-patterns.md#count-vs-for_each-deep-dive), [Code Patterns: moved blocks](references/code-patterns.md#moved-blocks-terraform-11), [Code Patterns: LLM mistakes](references/code-patterns.md#llm-mistake-checklist--code-patterns) |
 | **Secret exposure** | Secrets in defaults, state, logs, CI artifacts | [Security & Compliance](references/security-compliance.md), [Code Patterns: write-only](references/code-patterns.md#write-only-arguments-terraform-111), [State Management](references/state-management.md) |
 | **Blast radius** | Oversized stacks, shared prod/non-prod state, unsafe applies | [State Management](references/state-management.md), [Module Patterns](references/module-patterns.md) |
+| **Destroy cascade** | Targeted destroy deletes more than expected; locals referencing a targeted resource make all `for_each` consumers implicit dependents | Response Contract: plan-destroy first; [State Management: Safe Destroy](references/state-management.md#safe-destroy-protocol) |
 | **CI drift** | Local plan ≠ CI plan, apply without reviewed artifact, unpinned versions | [CI/CD Workflows](references/ci-cd-workflows.md), [Code Patterns: versions](references/code-patterns.md#version-management) |
 | **Compliance gaps** | Missing policy stage, no approval model, no evidence retention | [Security & Compliance](references/security-compliance.md), [CI/CD Workflows](references/ci-cd-workflows.md) |
 | **Testing blind spots** | Plan-only validation of computed values, set-type indexing, mock/real confusion | [Testing Frameworks](references/testing-frameworks.md) |
 | **State corruption / recovery** | Stuck lock, backend migration, drift reconciliation | [State Management](references/state-management.md) |
 | **Provider upgrade risk** | Breaking-change provider bump, unpinned modules | [Code Patterns: versions](references/code-patterns.md#version-management), [Module Patterns](references/module-patterns.md) |
 | **Provider lifecycle** | Removing a provider with resources still in state, orphaned resources, `removed` block usage | [State Management: Provider Removal](references/state-management.md#provider-removal) |
+| **Bootstrap / orchestration misuse** | `null_resource` + `local-exec` for bootstrap, `remote-exec` for setup scripts, provisioner stdout leaking secrets in CI logs | [Code Patterns: Provisioners as Last Resort](references/code-patterns.md#provisioners-as-last-resort) |
+| **Navigation / safe-rename blind spots** | Cannot locate symbol defs/refs semantically, value-symbol rename done as blind text replace, grep-only refactor missing refs, hallucinated `rg` shim | [Code Intelligence](references/code-intelligence-lsp.md#terraform-ls-capability-matrix) |
+| **Cross-cloud / provider mapping** | "What's the Azure/GCP equivalent of X", picking a backend/auth model per cloud | [State Management: Cross-cloud equivalents](references/state-management.md#cross-cloud-equivalents) |
 
 ## When to Use This Skill
 
@@ -180,7 +186,7 @@ checkov -d .
 
 **Don't:** store secrets in variables or `.tfvars`, use default VPC, skip encryption, open security groups to `0.0.0.0/0`, use inline `ingress`/`egress` blocks in `aws_security_group`.
 
-**Do:** source secrets from AWS Secrets Manager / Parameter Store or use `write_only` arguments on 1.11+, create dedicated VPCs, enforce encryption at rest and TLS, least-privilege SGs, use separate `aws_vpc_security_group_{ingress,egress}_rule` resources (AWS provider v5+).
+**Do:** source secrets from a cloud secret manager (AWS Secrets Manager / Azure Key Vault / GCP Secret Manager) or use `write_only` arguments on 1.11+, create dedicated VPCs, enforce encryption at rest and TLS, least-privilege SGs, use separate `aws_vpc_security_group_{ingress,egress}_rule` resources (e.g. AWS provider v5+).
 
 Marking a variable `sensitive = true` masks display only — the value still lives in state. Use `write_only` / `*_wo` on 1.11+, or keep secret material out of Terraform entirely via runtime lookups.
 
@@ -190,7 +196,9 @@ See [Security & Compliance](references/security-compliance.md) for trivy/checkov
 
 **Never use local state in teams or production.** Remote backends provide automatic locking, encryption, versioning, audit logging, and safe collaboration.
 
-### Minimum Viable Backend (AWS S3, 1.10+)
+### Choosing a Remote Backend
+
+AWS example (Azure `azurerm` / GCP `gcs` / TF Cloud syntax: see [State Management: Choosing a Remote Backend](references/state-management.md#choosing-a-remote-backend)):
 
 ```hcl
 terraform {
@@ -204,7 +212,7 @@ terraform {
 }
 ```
 
-On Terraform < 1.10, use `dynamodb_table = "terraform-state-lock"` instead of `use_lockfile`. Azure Storage, GCS, and Terraform Cloud all offer built-in locking — see the State Management reference for syntax.
+On Terraform < 1.10, use `dynamodb_table = "terraform-state-lock"` instead of `use_lockfile`. Azure Storage, GCS, and Terraform Cloud all offer built-in locking - see the State Management reference for syntax. For choosing among backends and their locking models, see [Choosing a Remote Backend](references/state-management.md#choosing-a-remote-backend).
 
 ### State Organization
 
@@ -251,12 +259,34 @@ Before emitting a feature, verify the runtime floor. See [Code Patterns: Feature
 
 ## Runtime-Specific Guidance
 
-- **Terraform 1.0-1.5 / OpenTofu 1.0-1.5**: Terratest for integration, static analysis + plan validation only (no native tests).
+- **Terraform 1.0-1.5 (OpenTofu starts at 1.6)**: Terratest for integration, static analysis + plan validation only (no native tests).
 - **1.6+**: native `terraform test` / `tofu test` available — migrate simple unit tests, keep Terratest for complex integration.
 - **1.7+**: mock providers cut test cost — mock for unit tests, real runs for final integration.
 - **1.10+**: S3 native lock-file (`use_lockfile`) is the correct default for new configurations — DynamoDB locking is no longer required.
 - **1.11+**: `write_only` arguments for secret handling keep credentials out of state.
 - **Terraform vs OpenTofu**: both supported. For licensing, governance, and feature delta, see [Quick Reference: Terraform vs OpenTofu](references/quick-reference.md#terraform-vs-opentofu-comparison).
+
+## Code Intelligence (terraform-ls)
+
+Semantic navigation for HCL. terraform-ls is optional; without it every row below degrades to a disclosed `rg` + Read fallback.
+
+Self-contained terraform-ls layer of a generic code-intelligence discipline - apply the rows below directly. Recommended companion: the `code-intelligence` plugin (same `antonbabenko/agent-plugins` marketplace) carries the generic discipline (position anchoring, degradation gate, disclosure format, anti-phantom-shim) and ships `/code-intelligence:doctor` for readiness. If it is installed, defer to its generic protocol; this skill stays fully self-contained without it.
+
+| Goal | Use | Tradeoff |
+|------|-----|----------|
+| Find definition / all references | terraform-ls `goToDefinition` / `findReferences` | Needs `init` + a position anchor |
+| Rename value symbol (var/local/output/provider alias) | Manual: `findReferences` -> per-file fresh Read -> edit -> `validate` | No rename provider |
+| Rename resource/module address | `moved` block + `plan` shows 0 destroy | Text rename forces destroy/recreate |
+| Exact text / known name / `.tfvars` / non-HCL | `rg` + Read | No semantic scope |
+
+✅ Supported: `goToDefinition`, `findReferences`, `documentSymbol`, `hover`, `workspaceSymbol`.
+❌ Unsupported: `goToImplementation`, call hierarchy, rename provider. Do not call these then report their absence as a finding.
+
+- ✅ Prereq: local `terraform`/`tofu` on PATH, `terraform init` run; cold start may need one retry.
+- ✅ LSP calls are position-anchored (`file:line:character`) - anchor with `rg` first, never symbol-name-only.
+- ❌ Do not claim "LSP broken, using rg" until the [Degradation Gate](references/code-intelligence-lsp.md#degradation-gate) passes; disclose any tool substitution on the first line.
+
+Depth: [Code Intelligence](references/code-intelligence-lsp.md#terraform-ls-capability-matrix).
 
 ## Reference Files
 
@@ -268,6 +298,7 @@ Progressive disclosure — essentials here, depth on demand:
 - [Security & Compliance](references/security-compliance.md) — trivy/checkov, secrets handling, compliance mappings
 - [State Management](references/state-management.md) — backends, locking, migration, multi-team, recovery
 - [Code Patterns](references/code-patterns.md) — block ordering, `count`/`for_each` deep dive, modern features, version management, locals
+- [Code Intelligence](references/code-intelligence-lsp.md) - terraform-ls capabilities, position-anchored calls, manual rename, degradation gate
 - [Quick Reference](references/quick-reference.md) — command cheat sheets, flowcharts, troubleshooting
 
 ## License

@@ -580,6 +580,17 @@ resource "aws_iam_policy" "bad_policy" {
 
 ---
 
+### Cross-cloud security map
+
+| Concern | AWS | Azure | GCP |
+|---------|-----|-------|-----|
+| Secret manager | `aws_secretsmanager_secret` | `azurerm_key_vault_secret` | `google_secret_manager_secret` |
+| Network firewalling | `aws_security_group` + `aws_vpc_security_group_*_rule` | `azurerm_network_security_group` + `azurerm_network_security_rule` | `google_compute_firewall` |
+| Identity | IAM (`aws_iam_role` / `aws_iam_policy`) | RBAC (`azurerm_role_assignment`) | IAM (`google_project_iam_*`) |
+| Encryption at rest | explicit (SSE / KMS) | default-on (optional CMK) | default-on (optional CMEK) |
+
+---
+
 ## Compliance Checklists
 
 ### SOC 2 Compliance
@@ -615,7 +626,7 @@ Common model mistakes to correct before returning security/compliance recommenda
 
 - assumes `sensitive = true` keeps the value out of state — it only masks display; use `write_only` / `*_wo` arguments on 1.11+ or an external secret lookup
 - proposes plaintext defaults in `variable` blocks or committed `.tfvars` "for demo convenience"
-- echoes secrets through `provisioner` commands or `local-exec` stdout into CI logs
+- echoes secrets through `provisioner` commands or `local-exec` stdout into CI logs (see [Provisioners as Last Resort](code-patterns.md#provisioners-as-last-resort) for the broader pattern)
 - emits outputs that expose full connection strings or credentials (even when marked `sensitive`)
 - mentions a compliance framework (SOC 2, PCI, HIPAA, GDPR, FedRAMP) but provides no enforceable gate — no policy stage, no approval model, no evidence artifact
 - confuses security best practices with compliance evidence (an encrypted bucket is not the same as a retained audit artifact proving it)
