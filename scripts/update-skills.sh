@@ -14,10 +14,21 @@ SKILLS=(
     "https://github.com/softaworks/agent-toolkit/tree/main/skills/skill-judge"
 
     # Third-party skills
-    "https://github.com/antonbabenko/terraform-skill/tree/main/skills/terraform-skill"
+    "https://github.com/antonbabenko/terraform-skill/tree/master/skills/terraform-skill"
+
+    # Matt Pocock's skills
+    "https://github.com/mattpocock/skills/tree/main/skills/productivity/writing-great-skills"
+    "https://github.com/mattpocock/skills/tree/main/skills/productivity/grill-me"
+    "https://github.com/mattpocock/skills/tree/main/skills/productivity/grilling"
+    "https://github.com/mattpocock/skills/tree/main/skills/engineering/domain-modeling"
+    "https://github.com/mattpocock/skills/tree/main/skills/engineering/grill-with-docs"
+    "https://github.com/mattpocock/skills/tree/main/skills/engineering/research"
+    "https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder"
 )
 
 mkdir -p "$SKILL_DIR"
+
+failed=0
 
 for url in "${SKILLS[@]}"; do
     [[ "$url" =~ github\.com/([^/]+/[^/]+)/tree/([^/]+)/(.+) ]] || continue
@@ -26,9 +37,18 @@ for url in "${SKILLS[@]}"; do
     tmp_dir="/tmp/skill-$$"
 
     rm -rf "$tmp_dir"
-    git clone --depth=1 --filter=blob:none --sparse -b "$branch" \
-        "https://github.com/$repo.git" "$tmp_dir" 2>/dev/null
-    git -C "$tmp_dir" sparse-checkout set "$path" 2>/dev/null
+    if ! git clone --depth=1 --filter=blob:none --sparse -b "$branch" \
+        "https://github.com/$repo.git" "$tmp_dir" 2>/dev/null; then
+        echo "Failed (clone): $url" >&2
+        failed=1
+        continue
+    fi
+    if ! git -C "$tmp_dir" sparse-checkout set "$path" 2>/dev/null; then
+        echo "Failed (sparse-checkout): $url" >&2
+        failed=1
+        rm -rf "$tmp_dir"
+        continue
+    fi
 
     if [[ -d "$tmp_dir/$path" ]]; then
         rm -rf "$SKILL_DIR/$skill_name"
@@ -36,6 +56,9 @@ for url in "${SKILLS[@]}"; do
         echo "Updated: $skill_name"
     else
         echo "Failed: $url" >&2
+        failed=1
     fi
     rm -rf "$tmp_dir"
 done
+
+exit "$failed"
