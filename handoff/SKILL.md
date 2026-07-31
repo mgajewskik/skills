@@ -3,7 +3,7 @@ name: handoff
 description: Compact the current conversation into a handoff document for another agent to pick up.
 ---
 
-Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save to the `handoff/` directory in the current workspace.
+Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save to the `handoff/` directory in the current workspace. Name the file: `YYYY-MM-DD-<kebab-slug>.md`.
 
 Include a "suggested skills" section in the document, which suggests skills that the agent should invoke.
 
