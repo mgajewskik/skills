@@ -24,6 +24,8 @@ SKILLS=(
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/grill-with-docs"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/research"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder"
+
+    "https://github.com/UditAkhourii/adhd/tree/main/skills/adhd"
 )
 
 mkdir -p "$SKILL_DIR"
