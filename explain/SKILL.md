@@ -1,6 +1,7 @@
 ---
 name: explain
 description: Explain and help users understand or ramp up on a broad or unfamiliar topic when they lack a concrete question, using conceptual mental models, tradeoffs, and practical boundaries.
+disable-model-invocation: true
 ---
 
 # Conceptual Explanations

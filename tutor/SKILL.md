@@ -1,6 +1,7 @@
 ---
 name: tutor
 description: Tutor technical subjects through practical, observable work or rigorous teach-back. Use when the user asks to "tutor me on X," "teach me X by doing," build independent technical competence, or enter an interactive multi-turn learning and teach-back loop. For generic "teach me," walkthrough, show-how, or explanation-review requests, clarify first and use this skill only when the user confirms that interactive competence-building intent. Do not use for ordinary explanations, implementation requests, or requests to solve work on the user's behalf.
+disable-model-invocation: true
 ---
 
 # Tutor

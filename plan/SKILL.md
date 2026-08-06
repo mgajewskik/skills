@@ -1,6 +1,7 @@
 ---
 name: plan
 description: Plan new work from scratch as a living markdown file with binary success criteria, anti-criteria, and independent workstreams. Use when the user says "let's create a plan", wants to plan a feature or change before implementing it, or needs a plan file other agents can execute and verify against. Use to-spec instead when the conversation already holds the design.
+disable-model-invocation: true
 ---
 
 # Plan

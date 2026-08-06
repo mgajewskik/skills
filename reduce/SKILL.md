@@ -1,6 +1,7 @@
 ---
 name: reduce
 description: Manual-only framework for reducing structural complexity and entropy in existing or proposed engineering code and configuration while preserving behavior and authoritative content. Use only when the user explicitly invokes $reduce or names the reduce skill for source code, tests, scripts, or application/build/CI/deploy/infrastructure configuration. Do not activate for generic reduce/improve/refactor requests, $reducing-entropy, prose, Agent Skills or agent-instruction files, general review/debugging, performance/security audits, or behavior-changing redesigns.
+disable-model-invocation: true
 ---
 
 # Reduce

@@ -1,6 +1,7 @@
 ---
 name: brainstorming
 description: "Optional idea-shaping skill for when the user explicitly wants to brainstorm, compare approaches, pressure-test a concept, or turn a rough idea into a lightweight plan. Do not trigger for routine implementation, small edits, or cases where the user clearly wants direct execution."
+disable-model-invocation: true
 ---
 
 # Brainstorming

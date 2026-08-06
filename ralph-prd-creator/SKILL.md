@@ -1,6 +1,7 @@
 ---
 name: ralph-prd-creator
 description: "Create effective PRDs (Product Requirements Documents) for Ralph loops / Ralph Wiggum autonomous AI coding agents. Use whenever the user wants to create a PRD, task list, or specification for use with Ralph loops, Claude Code loops, Codex loops, or any autonomous agent loop. Also use when the user says 'create a PRD', 'write a task list for ralph', 'break this down into stories', 'plan this feature for autonomous coding', 'help me write acceptance criteria', 'prepare this for a ralph loop', or mentions creating prd.json. Also trigger when the user asks how to structure work for AI agents, wants to decompose a feature into agent-executable tasks, or needs help writing CLAUDE.md / AGENTS.md companion files for autonomous coding. Covers PRD schema, extracted constraints, machine-verifiable acceptance criteria, anti-criteria, quantified criteria, story invalidation tracking, quality gates, progress tracking, failure prevention, and companion file creation for DevOps/cloud-native/infrastructure projects."
+disable-model-invocation: true
 ---
 
 # Ralph PRD Creator

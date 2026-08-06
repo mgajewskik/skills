@@ -1,6 +1,7 @@
 ---
 name: doubt
 description: "Explicit-only closing self-review that challenges meaningful conclusions from the current conversation or plan. Use when the user invokes `$doubt` or explicitly asks what is least certain or what they may be missing; do not run automatically."
+disable-model-invocation: true
 ---
 
 Review the full conversation and its final meaningful conclusions. Treat these as the user's questions and answer them directly:

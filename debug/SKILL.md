@@ -1,13 +1,14 @@
 ---
 name: debug
 description: "Explicit-only, production-safe debugging guidance that diagnoses problems one bounded probe at a time without automatic remediation. Use only when the user explicitly requests the debug skill by name or invokes /debug; do not activate for ordinary debugging language."
+disable-model-invocation: true
 ---
 
 # Debug Safely, One Probe at a Time
 
 Diagnose with narrow evidence, preserve user control, and keep true mutations user-run. Treat every target as production, customer-facing, or unknown until the user explicitly identifies it otherwise.
 
-This is behavioral guidance, not an enforcement switch. Standard skill metadata has no portable field that hard-disables implicit invocation, so the explicit-only trigger is best-effort and depends on following the description above.
+`disable-model-invocation: true` hard-blocks model auto-invocation; run via `/debug` or an explicit skill name only.
 
 ## Establish Safe Context
 

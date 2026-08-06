@@ -1,6 +1,7 @@
 ---
 name: writing
 description: "Draft, rewrite, critique, copyedit, or coach prose for humans to read. Use only when the user explicitly invokes `$writing`, says `use the writing skill`, or clearly names `writing` as the desired skill; do not auto-compete with ordinary writing or editing requests. Preserve meaning, evidence, constraints, and voice while improving reader-task fit."
+disable-model-invocation: true
 ---
 
 # Writing

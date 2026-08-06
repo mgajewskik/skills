@@ -1,6 +1,7 @@
 ---
 name: dossier
 description: Create senior-level deep research dossiers and roadmap companions. Use when the user asks for a dossier, senior research, deep research, in-depth research, mental models for a topic, senior perspective on a topic, how something actually works, ramp up on a topic, architectural deep dive, tradeoffs, failure modes, or what a senior would notice. Produces current-directory research-* and roadmap-* markdown artifacts, not a tutorial or short summary.
+disable-model-invocation: true
 metadata:
   author: local
   version: "0.1"
