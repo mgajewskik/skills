@@ -17,13 +17,14 @@ SKILLS=(
     "https://github.com/antonbabenko/terraform-skill/tree/master/skills/terraform-skill"
 
     # Matt Pocock's skills
-    "https://github.com/mattpocock/skills/tree/main/skills/productivity/writing-great-skills"
+    "https://github.com/mattpocock/skills/tree/main/skills/productivity/writing-for-agents"
     "https://github.com/mattpocock/skills/tree/main/skills/productivity/grill-me"
     "https://github.com/mattpocock/skills/tree/main/skills/productivity/grilling"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/domain-modeling"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/grill-with-docs"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/research"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder"
+    "https://github.com/mattpocock/skills/tree/main/skills/productivity/to-questionnaire"
 
     "https://github.com/UditAkhourii/adhd/tree/main/skills/adhd"
 )
