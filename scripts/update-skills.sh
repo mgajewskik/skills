@@ -24,6 +24,15 @@ SKILLS=(
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder"
     "https://github.com/mattpocock/skills/tree/main/skills/productivity/to-questionnaire"
 
+    # pstack skills
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/unslop"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/how"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/why"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/teach"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/blast-radius"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/technical-writing"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/typescript-best-practices"
+
     "https://github.com/UditAkhourii/adhd/tree/main/skills/adhd"
 )
 
