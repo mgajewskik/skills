@@ -34,6 +34,8 @@ SKILLS=(
     "https://github.com/cursor/plugins/tree/main/pstack/skills/typescript-best-practices"
 
     "https://github.com/UditAkhourii/adhd/tree/main/skills/adhd"
+
+    "https://github.com/cloudflare/security-audit-skill/tree/main/skills/security-audit"
 )
 
 mkdir -p "$SKILL_DIR"
