@@ -1,0 +1,5 @@
+interface:
+  display_name: "Work Mode"
+  short_description: "Playbooks, principles, and per-action authority for code and infra work"
+policy:
+  allow_implicit_invocation: false
