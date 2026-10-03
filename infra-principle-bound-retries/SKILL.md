@@ -2,6 +2,7 @@
 name: infra-principle-bound-retries
 description: Apply to any retry or polling loop, whether the agent runs it or writes it into IaC, scripts, pipelines, or services. Repeat only transient errors of repeat-safe operations, with exponential backoff, jitter, and a cap, at one layer; a permanent error goes to diagnosis.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Bound retries

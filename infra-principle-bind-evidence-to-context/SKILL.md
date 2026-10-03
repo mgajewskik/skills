@@ -2,6 +2,7 @@
 name: infra-principle-bind-evidence-to-context
 description: Apply when comparing infrastructure observations, reusing deployment evidence, or diagnosing across hosts, namespaces, identities, revisions, or time windows. Bind every consequential claim to the context actually observed; reject stale or mismatched evidence.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Bind evidence to context

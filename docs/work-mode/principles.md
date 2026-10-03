@@ -7,12 +7,12 @@ A principle is a separate skill: one rule, with its reason, its steps, a test qu
 ```text
 source                       count   model list   loaded by
 --------------------------   -----   ----------   --------------------------------------
-pstack principle-* leaves    24      no           work-mode (23, by path), the user (/name),
+pstack principle-* leaves    24      no           work-mode (23, by path),
                                                   other pstack skills that name them
-infra-principle-* leaves     14      no           work-mode (by path), the user (/name)
+infra-principle-* leaves     14      no           work-mode (by path)
 ```
 
-Pstack leaves come from `github.com/cursor/plugins` through `scripts/update-skills.sh`, unchanged; the script only adds `agents/openai.yaml` so Codex honors the same user-only setting. They are written for application code. When one applies to a live system, the router's index line adds its limit after "Live:", for example:
+Pstack leaves come from `github.com/cursor/plugins` through `scripts/update-skills.sh`, unchanged; the script only adds `agents/openai.yaml` so Codex honors the same user-only setting, and `user-invocable: false` so the `/` menu does not list them. They are written for application code. When one applies to a live system, the router's index line adds its limit after "Live:", for example:
 
 > **principle-fix-root-causes**. Debugging. Live: containment can precede root cause, and a restart that restores service establishes nothing about cause.
 
@@ -44,8 +44,8 @@ You skipped this when ...   an observable sign it was not
 ## Stop and limit            where the rule stops applying
 ```
 
-`scripts/check_work_mode.py` fails when an infra leaf misses any of these parts, when its Why has no link, when its description does not start with "Apply", or when it is not user-only on both hosts.
+`scripts/check_work_mode.py` fails when an infra leaf misses any of these parts, when its Why has no link, when its description does not start with "Apply", or when it is not user-only on both hosts and hidden from the `/` menu.
 
 ## Why user-only
 
-Upstream ships every pstack skill with `disable-model-invocation: true`: Poteto Mode loads them from its router when a trigger fires, so they never sit in every session's skill list. work-mode keeps that intent. None of the 38 leaves costs context until work-mode reads one, and you can still run any of them yourself with `/name`. When a vendored skill tells the agent to use another one (`teach` runs `how` and `why`), the agent reads that skill's `SKILL.md` by path too; `references/host-notes.md` says so.
+Upstream ships every pstack skill with `disable-model-invocation: true`: Poteto Mode loads them from its router when a trigger fires, so they never sit in every session's skill list. work-mode keeps that intent. None of the 38 leaves costs context until work-mode reads one. All 38 also carry `user-invocable: false`, so Claude Code keeps them out of the `/` menu and loads them only by path, never with `/name` or the Skill tool. When a vendored skill tells the agent to use another one (`teach` runs `how` and `why`), the agent reads that skill's `SKILL.md` by path too; `references/host-notes.md` says so.

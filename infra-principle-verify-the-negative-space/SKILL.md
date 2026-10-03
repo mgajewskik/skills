@@ -2,6 +2,7 @@
 name: infra-principle-verify-the-negative-space
 description: Apply when accepting any live modification, rollout, or destruction. Verify that what must not change did not change, by comparing a bounded neighbour set before and after, not only that the intended target changed.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Verify the negative space

@@ -2,6 +2,7 @@
 name: infra-principle-inventory-before-destroy
 description: Apply before preparing any delete, destroy, decommission, prune, or cleanup of a live resource, however it is phrased. Resolve every selector to a finite list of exact identifiers with owners, dependents, and retention status before any destroy command is drafted.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Inventory before destroy

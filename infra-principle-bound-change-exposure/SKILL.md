@@ -2,6 +2,7 @@
 name: infra-principle-bound-change-exposure
 description: Apply before expanding an infrastructure rollout or running a production experiment. Choose representative exposure, observation gates, and stop signals from the real workload and failure domains; do not assume a small canary isolates shared dependencies.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Bound change exposure

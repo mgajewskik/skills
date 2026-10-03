@@ -101,6 +101,8 @@ def check(root):
         if meta.get("name") != name:
             errors.append(f"{name}: frontmatter name does not match directory")
         errors += user_only_problems(root / name, meta)
+        if meta.get("user-invocable") != "false":
+            errors.append(f"{name}/SKILL.md: missing user-invocable: false")
         if not meta.get("description", "").startswith("Apply "):
             errors.append(f"{name}: description should start with 'Apply' (a trigger)")
         for part in LEAF_PARTS:

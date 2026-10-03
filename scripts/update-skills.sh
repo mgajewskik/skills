@@ -5,7 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Every skill keeps its upstream invocation setting. A user-only skill (frontmatter
+# Every skill keeps its upstream invocation setting; principle-* leaves also get hidden from the
+# slash menu (see hide_from_slash_menu). A user-only skill (frontmatter
 # "disable-model-invocation: true") never enters the model's skill list; the user names it,
 # or the agent reads its SKILL.md by path. A downloaded skill that names other user-only
 # skills gets a generated skill-paths.md with those paths (see write_skill_paths).
@@ -101,6 +102,20 @@ mirror_policy_for_codex() {
     elif ! grep -q 'allow_implicit_invocation: false' "$yaml"; then
         echo "Warning: $skill_name: agents/openai.yaml exists without allow_implicit_invocation: false; left unchanged" >&2
     fi
+}
+
+# Add "user-invocable: false" to a principle-* leaf so the slash menu does not list it. Upstream's
+# "disable-model-invocation: true" stays, so the leaf is loaded only by path.
+hide_from_slash_menu() {
+    local file="$1" end
+    end="$(frontmatter_end "$file")"
+    [[ -n "$end" ]] || return 0
+    awk -v end="$end" '
+        NR > 1 && NR < end && /^user-invocable:/ { next }
+        NR == end { print "user-invocable: false" }
+        { print }
+    ' "$file" > "$file.tmp"
+    mv "$file.tmp" "$file"
 }
 
 VENDORED=()
@@ -221,6 +236,9 @@ for url in "${SKILLS[@]}"; do
         rm -rf "$SKILL_DIR/$skill_name"
         cp -R "$tmp_dir/$path" "$SKILL_DIR/$skill_name"
         echo "Updated: $skill_name"
+        if [[ "$skill_name" == principle-* ]]; then
+            hide_from_slash_menu "$SKILL_DIR/$skill_name/SKILL.md"
+        fi
         if is_user_only "$SKILL_DIR/$skill_name/SKILL.md"; then
             mirror_policy_for_codex "$skill_name" "$SKILL_DIR/$skill_name"
         fi

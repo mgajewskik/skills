@@ -2,6 +2,7 @@
 name: infra-principle-leave-no-residue
 description: Apply before a diagnostic that opens, mounts, starts, or repairs something, and before closing any diagnosis, repair, rollout, or incident. Preserve state the diagnostic could destroy, keep a list of everything the work created or left changed, and remove or hand over each item before calling the work done.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Leave no residue

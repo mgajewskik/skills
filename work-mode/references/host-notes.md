@@ -17,7 +17,7 @@
 
 ## Reading vendored pstack skills here
 
-Vendored pstack skills are installed unchanged apart from an added `agents/openai.yaml` and generated `skill-paths.md` pointers, so their Cursor-specific text stays. Read it like this:
+Vendored pstack skills are installed unchanged apart from an added `agents/openai.yaml`, generated `skill-paths.md` pointers, and `user-invocable: false` on the `principle-*` leaves, so their Cursor-specific text stays. Read it like this:
 
 | Vendored text | Read it as |
 | --- | --- |

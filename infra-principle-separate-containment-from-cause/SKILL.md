@@ -2,6 +2,7 @@
 name: infra-principle-separate-containment-from-cause
 description: Apply during production incidents when reducing impact cannot wait for complete causal diagnosis, or when a restart or workaround restored service. Track containment success separately from root-cause confidence and preserve evidence without expanding agent authority.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Separate containment from cause

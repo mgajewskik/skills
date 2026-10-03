@@ -12,7 +12,7 @@ Most changes are one file plus one line in the router. The checker tells you whe
 
 ## Add a principle
 
-1. Create `infra-principle-<name>/SKILL.md` with the leaf anatomy from [principles](principles.md): an `Apply when ...` description, `disable-model-invocation: true`, the contract pointer, `## Why` with a linked source, `## Pattern`, `The test:`, `You skipped this when`, and `## Stop and limit`. Add `agents/openai.yaml` with `policy: allow_implicit_invocation: false` so Codex keeps it user-only too.
+1. Create `infra-principle-<name>/SKILL.md` with the leaf anatomy from [principles](principles.md): an `Apply when ...` description, `disable-model-invocation: true` and `user-invocable: false`, the contract pointer, `## Why` with a linked source, `## Pattern`, `The test:`, `You skipped this when`, and `## Stop and limit`. Add `agents/openai.yaml` with `policy: allow_implicit_invocation: false` so Codex keeps it user-only too.
 2. Add one line under **Infra** in the router's Principles index: `- **infra-principle-<name>**. When it applies, as observable events or phrases. The rule in one sentence.`
 3. Name it from the playbook steps where it should fire.
 

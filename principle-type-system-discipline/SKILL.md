@@ -2,6 +2,7 @@
 name: principle-type-system-discipline
 description: "Apply when designing types, reviewing a function signature, or writing code in any statically-typed language. Make illegal states unrepresentable, brand semantic primitives, parse external data at boundaries, refuse to lie to the compiler, exhaust variants, derive from authoritative schemas."
 disable-model-invocation: true
+user-invocable: false
 ---
 
 Skills named in this skill are user-only. Load them by reading the paths in [skill-paths.md](skill-paths.md), never through a skill tool, and give a subagent the path of any skill it needs.

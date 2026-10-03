@@ -2,6 +2,7 @@
 name: infra-principle-design-recovery-first
 description: Apply before approving infrastructure changes with availability, storage, data, or external side effects. Define a verified recovery destination, prerequisites, owner, and limits before execution; source reversion is not proof of data or service restoration.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Design recovery first

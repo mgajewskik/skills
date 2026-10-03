@@ -19,7 +19,7 @@ Two places hold upstream skills, and they never reference each other.
 
 ## update-skills.sh
 
-The script keeps a list of GitHub tree URLs. For each one it sparse-clones the repository and replaces the skill's directory in the catalog with the fresh copy. Each skill keeps the invocation setting its upstream chose: there is no per-entry override.
+The script keeps a list of GitHub tree URLs. For each one it sparse-clones the repository and replaces the skill's directory in the catalog with the fresh copy. Each skill keeps the invocation setting its upstream chose. The one addition: every `principle-*` leaf also gets `user-invocable: false`, which hides it from the Claude Code `/` menu; upstream's `disable-model-invocation: true` stays, so the leaf is loaded only by path.
 
 Claude Code reads the frontmatter flag `disable-model-invocation: true`; Codex reads `agents/openai.yaml`. So for every skill whose upstream frontmatter is user-only and that ships no `openai.yaml`, the script writes one with `allow_implicit_invocation: false`, and prints a line:
 
@@ -28,7 +28,7 @@ Updated: unslop
 Codex policy: unslop: wrote agents/openai.yaml (user-only upstream)
 ```
 
-An upstream `openai.yaml` is never overwritten. When a vendored skill names other user-only vendored skills, the script also writes a `skill-paths.md` with their paths and adds a one-line pointer to it in `SKILL.md` and in every other file that names one. Both are regenerated identically on every run. Nothing else in a vendored skill is edited. Its Cursor-specific text (model slugs, cloud workers, transcript paths) stays, and `work-mode/references/host-notes.md` says how to read it.
+An upstream `openai.yaml` is never overwritten. When a vendored skill names other user-only vendored skills, the script also writes a `skill-paths.md` with their paths and adds a one-line pointer to it in `SKILL.md` and in every other file that names one. Both are regenerated identically on every run. Apart from these and the principle flag, nothing in a vendored skill is edited. Its Cursor-specific text (model slugs, cloud workers, transcript paths) stays, and `work-mode/references/host-notes.md` says how to read it.
 
 The run is idempotent: a second run against the same upstream leaves every file byte-identical.
 
@@ -36,7 +36,7 @@ The run is idempotent: a second run against the same upstream leaves every file 
 
 - **Add a skill.** Append its tree URL to `SKILLS`, run the script, read the printed lines, and review the new directory with `git diff` and `git status`.
 - **Update everything.** Run the script, then review `git diff`. Upstream changes show up as ordinary diffs, including a change to a skill's invocation setting.
-- **Change a vendored skill's content or invocation setting.** Don't edit the catalog copy; the next run overwrites it. Change it upstream, or fork it into a skill of your own with a different name.
+- **Change a vendored skill's content or invocation setting.** Don't edit the catalog copy; the next run overwrites it. Change it upstream, or fork it into a skill of your own with a different name. The `principle-*` flag is the one exception; it lives in the script.
 
 ## Files adapted from upstream
 
@@ -60,6 +60,6 @@ Then record the new commit here.
 
 ## User-only skills
 
-- `work-mode` and the 14 `infra-principle-*` leaves: written here, user-only, read by path from work-mode.
-- Every pstack skill, because upstream ships them that way; work-mode reads the ones it needs by path.
+- `work-mode` and the 14 `infra-principle-*` leaves: written here, user-only, read by path from work-mode. The leaves also carry `user-invocable: false`.
+- Every pstack skill, because upstream ships them that way; work-mode reads the ones it needs by path. The `principle-*` leaves also carry `user-invocable: false`.
 - Matt Pocock's `grill-me`, `grill-with-docs`, `wayfinder`, and `to-questionnaire`, because upstream ships them that way (with their own `openai.yaml`).

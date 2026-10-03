@@ -2,6 +2,7 @@
 name: infra-principle-assign-one-state-owner
 description: Apply when Terraform, GitOps, controllers, automation, or operators may write overlapping desired state. Assign ownership at the conflicting resource or field scope, separate independent outputs, and coordinate real shared invariants rather than locking competing intentions.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Assign one state owner

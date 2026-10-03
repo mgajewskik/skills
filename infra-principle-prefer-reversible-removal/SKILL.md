@@ -2,6 +2,7 @@
 name: infra-principle-prefer-reversible-removal
 description: Apply when a deletion or decommission has been selected and a reversible step exists first, such as disable, deny access, scale to zero, detach, retain, snapshot, or stop managing without destroying. Stage removal so consumer breakage surfaces while it can still be undone.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Prefer reversible removal

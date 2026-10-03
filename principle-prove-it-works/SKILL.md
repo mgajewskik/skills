@@ -2,6 +2,7 @@
 name: principle-prove-it-works
 description: "Apply after completing a task, before declaring done. Verify against the real artifact (run the feature, read the actual value, inspect the diff), not a proxy, self-report, or 'it compiles.'"
 disable-model-invocation: true
+user-invocable: false
 ---
 
 Skills named in this skill are user-only. Load them by reading the paths in [skill-paths.md](skill-paths.md), never through a skill tool, and give a subagent the path of any skill it needs.

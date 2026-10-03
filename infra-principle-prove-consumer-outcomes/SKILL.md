@@ -2,6 +2,7 @@
 name: infra-principle-prove-consumer-outcomes
 description: Apply when deciding whether infrastructure works, closing a Linux or platform incident, or accepting a rollout. Check the intended consumer's actual outcome and forbidden behavior instead of inferring success from configuration validity, process liveness, or command acceptance.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Prove consumer outcomes

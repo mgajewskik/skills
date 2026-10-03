@@ -2,6 +2,7 @@
 name: infra-principle-preserve-compatible-transitions
 description: Apply to protocol, endpoint, schema, serialization, or configuration changes across mixed versions or persisted data. Verify intermediate reader/writer states and the permitted recovery version before activation or retiring an old contract.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Preserve compatible transitions

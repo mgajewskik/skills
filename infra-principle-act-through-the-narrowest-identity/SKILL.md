@@ -2,6 +2,7 @@
 name: infra-principle-act-through-the-narrowest-identity
 description: Apply before the first live command of a task, and again right before any apply, destroy, or bulk change. Name the acting identity and the resolved target, use the narrowest identity that can do the step, and rely on guards the platform enforces over care the agent promises.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Act through the narrowest identity

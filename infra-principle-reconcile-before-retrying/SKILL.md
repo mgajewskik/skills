@@ -2,6 +2,7 @@
 name: infra-principle-reconcile-before-retrying
 description: Apply when desired infrastructure differs from runtime, a deploy or API call times out, or a previous run may have partially completed. Establish observed progress and operation semantics before retrying; separate convergent state changes from one-shot effects.
 disable-model-invocation: true
+user-invocable: false
 ---
 
 # Reconcile before retrying
