@@ -10,7 +10,8 @@ Read-only: it runs `gh pr view`, `gh pr list`, `gh pr checks`, `gh api graphql` 
 
 Blockers are reported in this order across the whole stack, lowest PR first:
 merge conflicts, unresolved review threads, failing checks, then the merge gate
-(closed, draft, changes requested). With no blocker, pending checks or a mergeability GitHub has not
+(closed, draft, changes requested). A thread whose latest reply is the gh user's own is awaiting the
+reviewer: it is counted, not a blocker, until someone else replies. With no blocker, pending checks or a mergeability GitHub has not
 computed yet (UNKNOWN) mean wait; otherwise READY.
 READY means everything the agent can fix is clear; a required review may still be outstanding.
 
@@ -30,10 +31,15 @@ from dataclasses import asdict, dataclass, field
 
 REVIEW_THREADS_QUERY = """
 query($owner: String!, $repo: String!, $pr: Int!) {
+  viewer { login }
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
       reviewThreads(first: 100) {
-        nodes { id isResolved comments(first: 1) { nodes { databaseId body path line author { login } } } }
+        nodes {
+          id isResolved
+          comments(first: 1) { totalCount nodes { databaseId body path line author { login } } }
+          latest: comments(last: 1) { nodes { author { login } } }
+        }
       }
     }
   }
@@ -99,6 +105,7 @@ class Thread:
     comment_id: int | None = None  # REST id of the first comment, for the replies endpoint
     is_bugbot: bool = False
     bugbot_review_passes: int = 0  # Bugbot review runs seen on this PR, resolved threads included
+    answered: bool = False  # the gh user wrote the latest reply, so it is the reviewer's turn
 
 
 @dataclass
@@ -114,6 +121,14 @@ class Row:
     checks: list[Check] = field(default_factory=list)
     threads: list[Thread] = field(default_factory=list)
     review_automation_running: bool = False
+
+    @property
+    def open_threads(self):
+        return [t for t in self.threads if not t.answered]
+
+    @property
+    def answered_threads(self):
+        return [t for t in self.threads if t.answered]
 
     @property
     def failed(self):
@@ -192,6 +207,7 @@ def parse_threads(data):
         nodes = data["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
     except (KeyError, TypeError):
         raise QueryError("review threads: unexpected response shape") from None
+    viewer = (data["data"].get("viewer") or {}).get("login")
     parsed, pass_keys, keyless = [], set(), False
     for node in nodes:
         comments = (node.get("comments") or {}).get("nodes") or []
@@ -204,12 +220,15 @@ def parse_threads(data):
                 pass_keys.add(key)
             else:
                 keyless = True
-        parsed.append((node, first, author, body, bugbot))
+        latest = ((node.get("latest") or {}).get("nodes") or [{}])[-1]
+        replied = (node.get("comments") or {}).get("totalCount", len(comments)) > 1
+        answered = bool(viewer) and replied and (latest.get("author") or {}).get("login") == viewer
+        parsed.append((node, first, author, body, bugbot, answered))
     passes = len(pass_keys) or (1 if keyless else 0)
     return [Thread(id=node["id"], author=author, path=first.get("path"), line=first.get("line"),
                    body=body[:BODY_LIMIT], comment_id=first.get("databaseId"), is_bugbot=bugbot,
-                   bugbot_review_passes=passes)
-            for node, first, author, body, bugbot in parsed if not node.get("isResolved")]
+                   bugbot_review_passes=passes, answered=answered)
+            for node, first, author, body, bugbot, answered in parsed if not node.get("isResolved")]
 
 
 def order_stack(number, open_prs):
@@ -383,8 +402,8 @@ def decide(rows, allow_draft):
         if conflicted(row):
             return ("blocker", "conflicts", row, {"mergeable": row.mergeable, "mergeState": row.merge_state})
     for row in rows:
-        if row.state == "OPEN" and row.threads:
-            return ("blocker", "review-threads", row, {"threads": [asdict(t) for t in row.threads]})
+        if row.state == "OPEN" and row.open_threads:
+            return ("blocker", "review-threads", row, {"threads": [asdict(t) for t in row.open_threads]})
     for row in rows:
         if row.state == "OPEN" and row.ci in ("failing", "refused"):
             failed = [asdict(c) for c in row.failed]
@@ -412,7 +431,8 @@ def backoff(interval, failures):
 def summarize(row):
     return {"pr": row.pr, "url": row.url, "state": row.state, "ci": row.ci, "mergeState": row.merge_state,
             "reviewDecision": row.review_decision, "draft": row.draft, "mergeable": row.mergeable,
-            "threads": len(row.threads), "reviewAutomationRunning": row.review_automation_running,
+            "threads": len(row.open_threads), "awaitingReviewer": len(row.answered_threads),
+            "reviewAutomationRunning": row.review_automation_running,
             "failed": [c.name for c in row.failed], "pending": [c.name for c in row.pending]}
 
 
@@ -429,6 +449,7 @@ def status_table(rows):
                   "failing": f"{len(row['failed'])} failed" + (f", {len(row['pending'])} pending" if row["pending"] else "")
                   }[row["ci"]]
             review = (f"{row['threads']} open" if row["threads"] else "clear") + (
+                f", {row['awaitingReviewer']} awaiting reviewer" if row.get("awaitingReviewer") else "") + (
                 ", review automation running" if row["reviewAutomationRunning"] else "")
             if row["draft"]:
                 merge = "draft"

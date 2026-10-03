@@ -173,6 +173,25 @@ class ParsingTest(unittest.TestCase):
             {"id": "T", "isResolved": False, "comments": {"nodes": [{"databaseId": 991, "body": "x"}]}}]}}}}}
         self.assertEqual(watch_pr.parse_threads(data)[0].comment_id, 991)
 
+    def test_thread_is_answered_when_the_viewer_wrote_the_latest_reply(self):
+        def node(id, count, first, latest):
+            return {"id": id, "isResolved": False,
+                    "comments": {"totalCount": count, "nodes": [{"body": "x", "author": {"login": first}}]},
+                    "latest": {"nodes": [{"author": {"login": latest}}]}}
+        data = {"data": {"viewer": {"login": "me"}, "repository": {"pullRequest": {"reviewThreads": {"nodes": [
+            node("replied", 2, "rev", "me"),
+            node("reviewer-again", 3, "rev", "rev"),
+            node("own-note", 1, "me", "me"),
+        ]}}}}}
+        answered = {t.id: t.answered for t in watch_pr.parse_threads(data)}
+        self.assertEqual(answered, {"replied": True, "reviewer-again": False, "own-note": False})
+
+    def test_thread_is_unanswered_when_the_viewer_is_unknown(self):
+        data = {"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [
+            {"id": "T", "isResolved": False, "comments": {"totalCount": 2, "nodes": [{"body": "x"}]},
+             "latest": {"nodes": [{"author": {"login": "me"}}]}}]}}}}}
+        self.assertFalse(watch_pr.parse_threads(data)[0].answered)
+
     def test_order_stack_survives_a_cycle(self):
         open_prs = [{"number": 1, "headRefName": "a", "baseRefName": "b"},
                     {"number": 2, "headRefName": "b", "baseRefName": "a"}]
@@ -197,6 +216,18 @@ class VerdictTest(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertEqual(events[-1]["threads"][0]["body"], "please rename")
         self.assertEqual((events[-1]["rows"][0]["ci"], events[-1]["rows"][0]["failed"]), ("failing", ["build"]))
+
+    def test_answered_threads_wait_for_the_reviewer_instead_of_blocking(self):
+        answered = watch_pr.Thread("T2", "reviewer", "app.py", 9, "why?", answered=True)
+        code, events, _ = watch(FakeReader({7: facts(7)}, threads={7: [answered]}), "--pr", "7")
+        self.assertEqual((code, events[-1]["kind"]), (0, "READY"))
+        self.assertEqual((events[-1]["rows"][0]["threads"], events[-1]["rows"][0]["awaitingReviewer"]), (0, 1))
+
+    def test_only_unanswered_threads_block(self):
+        answered = watch_pr.Thread("T2", "reviewer", "app.py", 9, "why?", answered=True)
+        code, events, _ = watch(FakeReader({7: facts(7)}, threads={7: [THREAD, answered]}), "--pr", "7")
+        self.assertEqual(code, 3)
+        self.assertEqual([t["id"] for t in events[-1]["threads"]], ["T1"])
 
     def test_failing_check_exits_4(self):
         code, events, _ = watch(FakeReader({7: facts(7)}, checks={7: [FAILED, PENDING]}), "--pr", "7")

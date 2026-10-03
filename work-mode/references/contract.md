@@ -21,6 +21,7 @@ action
   |                                                                what it writes and calls
   +-- git: local operations (branch, commit, rebase unpushed) ---> agent does it
   +-- git: push (no force) to the user's working branch ---------> agent does it
+  +-- review-thread reply on a PR the user asked to babysit -----> agent does it
   +-- git: any other push, force-push, remote branch delete,
   |        merge, tag, release, PR open/close/merge/review ------> irreversible: user executes
   |
@@ -37,7 +38,9 @@ action
 
 **The user's working branch** is the one branch the user is working on in this task: the branch they named, or the non-default branch that was checked out when the task started. Never the default branch, never a branch you created unless the user named it, never anyone else's branch. A push that needs `--force` or `--force-with-lease` is a force-push.
 
-**Always irreversible**, whatever the checklist says: deleting resources or data, data writes and repairs, secret or key rotation, IAM or permission removal (detaching a policy, deleting a role binding, revoking a key or grant from an identity), and anything that sends a message or notifies people (chat, email, tickets, PR comments and reviews, webhooks, pages). A deny, disable, or scale-to-zero stage of a teardown is not a removal of anyone's permissions; it goes through the checklist like any other change, and fails it when the deny could also block your own revert.
+**Always irreversible**, whatever the checklist says: deleting resources or data, data writes and repairs, secret or key rotation, IAM or permission removal (detaching a policy, deleting a role binding, revoking a key or grant from an identity), and anything that sends a message or notifies people (chat, email, tickets, PR comments and reviews, webhooks, pages), apart from the Babysit replies below. A deny, disable, or scale-to-zero stage of a teardown is not a removal of anyone's permissions; it goes through the checklist like any other change, and fails it when the deny could also block your own revert.
+
+**Babysit replies**: on a PR the user asked you to babysit, you post replies to its review threads and resolve the review-bot threads (Bugbot, an automated security review) you fixed or dismissed. A human reviewer resolves their own thread. Replies go out as the `gh` user, so each one names the commit that fixed the finding or the concrete reason for dismissing it. Everything else in the message class stays user-executed: reviews and approvals, top-level PR comments, comments on any other PR, issues, and chat.
 
 **CI reruns**: rerunning a failed CI job once for a PR whose head is the user's working branch is agent-run, after reading the workflow; a job that deploys, publishes, releases, or notifies anyone is user-executed.
 

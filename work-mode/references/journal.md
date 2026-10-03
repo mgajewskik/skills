@@ -7,7 +7,7 @@ One append-only file records every live change the agent makes, the evidence beh
   journal.jsonl     one JSON object per line, append-only
   snapshots/        redacted prior state, one file per change
   handoffs/         irreversible handoffs for the user (see handoff.md)
-  replies/          drafted review replies for the user to post (Babysit)
+  replies/          review-reply payloads posted by Babysit
   pr-<slug>.md      a PR body for the user to open (Opening a PR)
   resume-<slug>.md  a resume note (Pause safely)
 ```

@@ -12,6 +12,8 @@
 | Loop or wake later | `/loop` (fixed or self-paced interval). | No built-in loop: the user reruns the playbook, or schedules `codex exec` themselves. | Manual rerun. |
 | The user runs a command in the session | `! <command>` puts its output in the conversation. | The user runs it and pastes the result. | Same. |
 | Session transcripts (for `recall`, `reflect`, `show-me-your-work`) | `~/.claude/projects/<project>/*.jsonl` | `~/.codex/sessions/` | Ask the user where they are. |
+| Drive a browser (UI repro and verification) | Standard Chrome through the `chrome-devtools` MCP server: navigate, click, fill, read the console and network, take screenshots. | The `chrome-devtools` plugin. | A Chrome DevTools MCP server when configured. Without one, a headless screenshot from an installed tool, and say the check is weaker. |
+| Per-turn work-mode reminder | The `UserPromptSubmit` hook in work-mode's frontmatter. Invoking `/work-mode` registers it, and it then adds a one-line reminder to every later prompt in the session. `work-agent.md` declares the same hook, so a `--agent work-agent` session should get it too (untested). | No equivalent; retype `work-mode` when a new task starts. | Paste the reminder line from work-mode's frontmatter when a new task starts. |
 
 ## Reading vendored pstack skills here
 
@@ -27,7 +29,8 @@ Vendored pstack skills are installed unchanged apart from an added `agents/opena
 | `~/.cursor/skills/`, `~/.cursor/plugins/` (in `reflect` references) | This skill catalog. |
 | "read the Principles section of `poteto-mode`" (in `figure-it-out`) | Read the Principles section of **work-mode**'s `SKILL.md`. |
 | "Use the **how** skill", "run `why`", "read **principle-...**" inside a vendored skill | Do not call a skill tool. Read `<catalog>/<name>/SKILL.md` by path, per the rule at the top of work-mode's `SKILL.md`. |
-| `control-ui`, `control-cli`, Origin, Graphite, `/setup-pstack` | Not available. Drive the real surface yourself (CLI, HTTP, test harness), or generate a project verification skill with **create-verification-skill**; use plain git and `gh` for stacks and PRs. |
+| `control-ui` | Chrome through the `chrome-devtools` MCP server ([Drive a browser](#generic-words-used-in-work-mode)). |
+| `control-cli`, Origin, Graphite, `/setup-pstack` | Not available. Drive the CLI or TUI yourself (run it, or a `tmux` session for a TUI), use HTTP or the test harness, or generate a project verification skill with **create-verification-skill**; use plain git and `gh` for stacks and PRs. |
 
 None of this changes authority: a vendored skill's instruction to commit, push, comment, open a PR, or touch a live system still goes through [the contract](contract.md).
 

@@ -4,9 +4,9 @@ Run at the end of a code playbook when the change is meant for review. Opening a
 
 **Branch.** Work on the user's working branch, or a branch the user named. Dirty tree with unrelated work: leave that work alone and commit only your files. If the change needs a new branch, create it locally; pushing it is the user's (the contract lets you push only the user's working branch).
 
-**Commits.** Commit liberally while working. Before handing over, rebase your unpushed commits into small, ordered commits. Each commit is landable and ordered to tell the story. Amend when the fix belongs in a just-made commit; new commit when separable. Never rewrite commits that are already pushed.
+**Commits.** Commit liberally while working. Before handing over, rebase your unpushed commits into small, ordered commits. Each commit is landable and ordered to tell the story. Amend when the fix belongs in a just-made commit; new commit when separable. Never rewrite commits that are already pushed. The **commit** skill writes every commit message.
 
-**Before review.** Run the **no-comments** skill over the diff. Write the PR title, description, and commit bodies with the **technical-writing** skill (every layer except Diátaxis), then apply **unslop**. Use one word for each action, keep articles, and avoid `-ing` when a plain verb works. Follow the repository's own PR and commit conventions when it has them; they win over this page.
+**Before review.** Run the **no-comments** skill over the diff. Write the PR title and description with the **technical-writing** skill (every layer except Diátaxis), then apply **unslop**. Use one word for each action, keep articles, and avoid `-ing` when a plain verb works. Follow the repository's own PR conventions when it has them; they win over this page.
 
 **Titles.** Without a repository convention, use Conventional Commits: `type(scope): subject`, with `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, or `perf`, the changed area as scope, a short imperative subject, a real symbol when one carries the change, and no trailing period.
 

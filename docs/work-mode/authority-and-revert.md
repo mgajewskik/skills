@@ -28,7 +28,7 @@ action
 
 "Your working branch" is the one branch you are working on in this task: the one you named, or the non-default branch checked out when the task started. The agent never pushes to the default branch, to another person's branch, or to a branch it created unless you named it.
 
-Some actions are irreversible whatever the checklist says: deleting resources or data, data writes and repairs, secret or key rotation, removing an identity's permissions, and anything that sends a message or notifies people. A deny or disable stage during a teardown is judged by the checklist instead. Installing or upgrading dependencies always needs your approval first.
+Some actions are irreversible whatever the checklist says: deleting resources or data, data writes and repairs, secret or key rotation, removing an identity's permissions, and anything that sends a message or notifies people. One message is the agent's: on a PR you asked it to babysit, it replies to review threads and resolves the review-bot threads it fixed or dismissed. The replies go out under your `gh` account. Human reviewers resolve their own threads, and reviews, approvals, top-level comments, and anything on another PR stay yours. A deny or disable stage during a teardown is judged by the checklist instead. Installing or upgrading dependencies always needs your approval first.
 
 ## The reversibility checklist
 

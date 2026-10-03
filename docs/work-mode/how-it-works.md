@@ -37,9 +37,19 @@ task
   +-- live system or infrastructure source --> playbooks/infra/
   +-- mixed ("fix the module, roll it out") -> start where the failure is observed,
   |                                            hand over at the boundary with exit evidence
-  +-- large, cross-cutting, nothing fits ----> the figure-it-out skill
+  +-- large or cross-cutting, even if Feature
+  |   fits; stepped-away work; nothing fits --> the figure-it-out skill
+  +-- "plan this before we build it" --------> the plan skill (the plan file is the deliverable)
   +-- a concept question with no target -----> answer with cited sources, no playbook
 ```
+
+Removal wording ("clean up", "prune", "tear down") sends live resources, data, access, and environments to Teardown. Cleaning up code is Refactoring.
+
+Some triggers fire on any task, whichever playbook matched: `how` before a nontrivial change or judgment, `architect` for code that crosses a function boundary, `swarm` or `arena` for parallel fan-out, `interrogate` for a contested design, the throughput checkpoint for multi-step work, driving the real surface for repros, Babysit for any PR-status request, skeptical triage for review-bot comments, and the `commit` skill for every commit message. The trigger table in `SKILL.md` lists them all.
+
+## Staying on
+
+Invoking `/work-mode` in Claude Code registers a `UserPromptSubmit` hook from the skill's frontmatter. For the rest of the session, every prompt gets a one-line reminder to match a playbook and apply the triggers on a new task, and to skip that on a casual turn. A new `claude` session starts without it. Codex has no equivalent, so retype `work-mode` when a new task starts there.
 
 Code and infra playbooks stay separate on purpose. Infra Debug is strictly read-only and never turns into a fix; code Bug fix reproduces and fixes in one flow. Merging them would blur that line.
 

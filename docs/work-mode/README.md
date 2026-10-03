@@ -2,7 +2,7 @@
 
 `work-mode` is one operating mode for code and infrastructure work. It sends each task to a playbook, loads a principle only when its trigger fires, and decides for each action who runs it: the agent or you.
 
-It never turns on by itself. Type `work-mode` (or `/work-mode`) at the start of a task you want done with this discipline. Casual questions don't need it. To keep it on for a whole session, start Claude Code as the work agent: `claude --agent work-agent`.
+It never turns on by itself. Type `work-mode` (or `/work-mode`) at the start of a task you want done with this discipline. Casual questions don't need it. In Claude Code, `/work-mode` stays on for the rest of the session: a hook reminds the agent on every later prompt to route a new task through a playbook. Starting Claude Code as the work agent (`claude --agent work-agent`) also loads it for the whole session.
 
 ## The loop at runtime
 
@@ -34,6 +34,7 @@ reply: consumer-first, every claim labeled, one status line, one next action
 4. [Trust](trust.md). Why the agent's own "done" is not enough, and what the scripts enforce.
 5. [Vendoring](vendoring.md). How upstream skills reach this catalog.
 6. [Extending](extending.md). Adding a playbook or a principle, and running the checks.
+7. [Compared with Poteto Mode](poteto-mode-comparison.md). What work-mode kept, dropped, and restored from upstream, and what is still missing.
 
 ## Where things live
 

@@ -17,6 +17,7 @@ CODE_PLAYBOOKS = {
 }
 INFRA_PLAYBOOKS = {"debug", "change", "deploy", "live-modify", "teardown", "incident", "drift", "migration"}
 NOT_INDEXED = {"principle-experience-first"}
+LOCAL_SKILLS = {"commit", "plan"}  # the catalog's own skills that work-mode routes to
 REMOVED = ("poteto-mode", "setup-pstack", "make-bot-ui", "automate-me", "infra-mode", "ledger.py", "contracts.md",
            "deslop", "control-ui", "control-cli", "create-skill", "Origin")
 LEAF_PARTS = ("## Why", "## Pattern", "## Stop and limit", "The test:", "You skipped this when",
@@ -119,7 +120,7 @@ def check(root):
     except (ImportError, OSError) as error:
         errors.append(f"cannot compare handoff template with linter: {error}")
 
-    allowed = vendored_names(root) | set(leaves) | {"work-mode"}
+    allowed = vendored_names(root) | set(leaves) | LOCAL_SKILLS | {"work-mode"}
     for package in [mode] + [root / name for name in leaves]:
         for file in sorted(package.rglob("*.md")):
             content = file.read_text()

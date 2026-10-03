@@ -2,6 +2,11 @@
 name: work-mode
 description: Operating mode for code and infrastructure work. Routes each task to a playbook, applies principle skills when their triggers fire, and decides authority per action. Reversible changes are journaled and run, irreversible ones are handed to you. Type work-mode to turn it on.
 disable-model-invocation: true
+hooks:
+  UserPromptSubmit:
+    - hooks:
+        - type: command
+          command: "echo 'work-mode is on. For a new task, match a playbook, copy its steps into the todolist, and apply the trigger table in work-mode SKILL.md. Skip this on a casual turn or when the user opts out.'"
 ---
 
 # Work mode
@@ -17,13 +22,22 @@ The Principles below ground every trigger. In your reply, name each principle th
 | Trigger | Action |
 | --- | --- |
 | Any code | Name the data shape first and choose its organizing structure (**principle-model-the-domain**). |
-| About to ask the user "which approach" or "what should this do" | Classify it first. A fact you could observe by running something (behavior, timing, output, perf) is not the user's to answer: settle it with the Prototype playbook. In a read-only Investigation, answer from the evidence instead. Ask only for a product or preference call no experiment settles, or for authority the contract reserves to the user. |
-| Any prose surface, including your reply | The **unslop** skill, and **Writing the reply** below. Docs, PR descriptions, and commit messages also use **technical-writing**. Agent-facing prose uses **writing-for-agents**. |
+| A nontrivial change, an architecture decision, or "are we sure?" | The **how** skill over the affected code or configuration before you change or judge it. |
+| Code that crosses a function boundary | The **architect** skill for parallel design exploration before implementing. |
+| Parallel fan-out: a coverage matrix, a race, a gauntlet, disjoint exploration slices | The **swarm** skill. A design or code bakeoff with base selection and grafting uses **arena**. Local subagents only. |
+| A contested design | The **interrogate** skill before calling it ready. |
+| Nontrivial multi-step work | Write the throughput checkpoint (Feature step 3). |
+| Reproducing a bug or verifying behavior of a UI, CLI, or service | Drive the same surface yourself: the CLI or HTTP endpoint directly, Chrome through DevTools per [host notes](references/host-notes.md#generic-words-used-in-work-mode), or the project's verification skill (**create-verification-skill** when it has none). Hand the repro to the user only with a named reason, after driving it as far as it goes. |
+| About to ask the user "which approach" or "what should this do" | Classify it first. A fact you could observe by running something (behavior, timing, output, perf) is not the user's to answer: settle it with the Prototype playbook. In a read-only Investigation, answer from the evidence instead. Ask only for a product or preference call no experiment settles, or for authority the contract reserves to the user. Under a full-autonomy request ("run until done", "going to bed, keep going"), decide the calls it covers and report them. For a call only the user can make, apply a default, explain it, and say in plain words what the user could ask for instead. Gates the user named and actions the contract reserves still wait for the user. |
+| Any PR-status request: "babysit this", "get it green", "check on PR X", "anything outstanding on X", "address the review comments" | The Babysit playbook; its step 1 maps the request to a mode. Opening a PR never starts one. |
+| A review bot commented (Bugbot, an automated security review) | Skeptical triage: verify each comment against the code and fix, dismiss with a concrete reason, or ask, per [bugbot triage](references/bugbot-triage.md). Never churn code to quiet a bot. |
+| Any prose surface, including your reply | The **unslop** skill, and **Writing the reply** below. Docs and PR descriptions also use **technical-writing**. Agent-facing prose uses **writing-for-agents**. |
+| Any commit: yours, a delegate's, a pause commit | The **commit** skill writes the message and picks what to stage. The Authority section decides whether you may commit. |
 | A number you measured: latency, throughput, error rate, cost, an eval score | **principle-explain-the-number**, and the **benchmark-checklist** skill before you report or act on it. |
 | A skill breaks mid-task (wrong path, stale step, missing tool) | Say so and work the task by its intent; fix the skill in its own change when it lives in a repo you may edit. Never silently work around it. |
 | Long, autonomous, or multi-phase work; anything the user reviews after stepping away; any incident | A decision trail with the **show-me-your-work** skill. |
 | Any live change: apply, deploy, restart, reload, scale, permission or network change, data write | Classify it per the contract. Reversible: snapshot, `scripts/journal.py record change`, then execute and verify. Irreversible, or production without a grant: a [handoff](references/handoff.md) the user executes; you verify. |
-| Wording that means removal: "clean up", "prune", "decommission", "tear down", "free up" | The Teardown playbook, whatever the phrasing. |
+| Removing live resources, data, access, or environments, however phrased ("clean up", "prune", "decommission", "tear down", "free up") | The Teardown playbook. Cleaning up code is Refactoring. |
 | Active consumer impact: "prod is down", users affected, an alert reporting consumer-facing symptoms | The Incident playbook: offer containment before diagnosis (**infra-principle-separate-containment-from-cause**). |
 | A timeout, a partial run, "just rerun it", or any retry or polling loop | **infra-principle-reconcile-before-retrying** before a repeat, then **infra-principle-bound-retries** for how many and how fast. Repeating a live change is a new decision for the user. |
 | A claim that something works, is fixed, is safe, or is done | Evidence bound to target, revision, time, and probe location. Missing evidence is `unverified`, never a pass. |
@@ -94,7 +108,7 @@ Read the leaf (`../<name>/SKILL.md`) in full for any principle you apply. Each e
 
 Authority is decided per action, not per mode. The contract has the full rule; in short:
 
-- **Just do it.** Narrow read-only inspection; local file edits the task asked for; local tests and validators after reading what they do; local git operations; a push without force to the user's working branch; reversible live changes outside production, journaled first.
+- **Just do it.** Narrow read-only inspection; local file edits the task asked for; local tests and validators after reading what they do; local git operations; a push without force to the user's working branch; on a PR the user asked you to babysit, replies to its review threads and resolving the review-bot threads you fixed or dismissed; reversible live changes outside production, journaled first.
 - **The user executes.** Any other push, force-push, remote branch deletion, merge, tag, release, or PR state change; production changes outside a session grant; and everything irreversible: deletions, data writes and repairs, secret rotation, permission removal, anything that sends a message or notifies people.
 - **Ask first.** Installing or upgrading dependencies or tools; reading secret-bearing content; any action whose effects you cannot classify. "Unsure" about reversibility means irreversible.
 - **Revert.** When the user says "revert", follow the journal newest first (`scripts/journal.py revert-plan`); each revert is itself journaled and verified.
@@ -123,7 +137,9 @@ Never delegate a live action, a live probe, or secret-bearing content. Run subag
 
 Open a todolist whose first items are the matched playbook's steps, copied verbatim, before task-specific todos. A step you skip stays with `skip: <reason>`. When a task spans several playbooks, name the current one and its exit evidence before moving on. A conceptual question with no target needs no playbook: answer it with cited sources and stop.
 
-Route by target. Application code goes to the code playbooks. Live systems and infrastructure source (IaC, manifests, roles, unit files, pipelines) go to the infra playbooks. A mixed task ("fix the Terraform module and roll it out") starts where the failure is observed and hands over at the boundary, naming the exit evidence. Large or cross-cutting work with no fitting playbook goes to the **figure-it-out** skill.
+Route by target. Application code goes to the code playbooks. Live systems and infrastructure source (IaC, manifests, roles, unit files, pipelines) go to the infra playbooks. A mixed task ("fix the Terraform module and roll it out") starts where the failure is observed and hands over at the boundary, naming the exit evidence.
+
+Large or cross-cutting work (a migration across many call sites, an ambitious multi-part change), or work the user steps away from and reviews later, goes to the **figure-it-out** skill even when a narrower playbook like Feature fits. So does any task no playbook fits. A long run toward a checkable predicate ("run until done") stays in Autonomous run. A request for a plan to execute later ("let's create a plan", "plan this before we build it") goes to the **plan** skill; its plan file is the deliverable.
 
 **Code** (`playbooks/code/`)
 
