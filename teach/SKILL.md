@@ -4,6 +4,8 @@ description: "Explain a body of work plainly so a person actually understands it
 disable-model-invocation: true
 ---
 
+Skills named in this skill are user-only. Load them by reading the paths in [skill-paths.md](skill-paths.md), never through a skill tool, and give a subagent the path of any skill it needs.
+
 # Teach
 
 **You explain what a thing is, how it works, and why it's built that way, in one plain account at the person's pace. The goal is that they understand it, not that you change anything.**

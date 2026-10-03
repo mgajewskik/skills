@@ -2,3 +2,4 @@ sources/**
 .codex/**
 legacy/**
 **/openai.yaml
+synced/
