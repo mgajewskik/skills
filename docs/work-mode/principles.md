@@ -1,6 +1,6 @@
 # Principles
 
-A principle is a separate skill: one rule, with its reason, its steps, a test question, and a sign that it was skipped. work-mode's router indexes 34 of them in one line each. The agent reads a leaf in full, by path (`<catalog>/<name>/SKILL.md`), only when its trigger fires, and cites only leaves it read.
+A principle is a separate skill: one rule, with its reason, its steps, a test question, and a sign that it was skipped. work-mode's router indexes 37 of them in one line each. The agent reads a leaf in full, by path (`<catalog>/<name>/SKILL.md`), only when its trigger fires, and cites only leaves it read.
 
 ## Where they come from
 
@@ -9,7 +9,7 @@ source                       count   model list   loaded by
 --------------------------   -----   ----------   --------------------------------------
 pstack principle-* leaves    24      no           work-mode (23, by path), the user (/name),
                                                   other pstack skills that name them
-infra-principle-* leaves     11      no           work-mode (by path), the user (/name)
+infra-principle-* leaves     14      no           work-mode (by path), the user (/name)
 ```
 
 Pstack leaves come from `github.com/cursor/plugins` through `scripts/update-skills.sh`, unchanged; the script only adds `agents/openai.yaml` so Codex honors the same user-only setting. They are written for application code. When one applies to a live system, the router's index line adds its limit after "Live:", for example:
@@ -28,7 +28,7 @@ The infra leaves were written for this setup, grounded in Google SRE, the AWS Bu
 | Architecture | model-the-domain, boundary-discipline, type-system-discipline, make-operations-idempotent, migrate-callers-then-delete-legacy-apis, separate-before-serializing-shared-state | Writing logic, types, adapters, retries, or anything concurrent actors share. |
 | Verification | prove-it-works, fix-root-causes, sequence-verifiable-units, test-behavior-not-implementation, explain-the-number | Before saying done, while debugging, writing tests, or reporting a number. |
 | Delegation and Meta | guard-the-context-window, never-block-on-the-human, encode-lessons-in-structure | Context filling up, tempted to ask about reversible work, or repeating an instruction. |
-| Infra | prove-consumer-outcomes, bind-evidence-to-context, verify-the-negative-space, reconcile-before-retrying, assign-one-state-owner, preserve-compatible-transitions, bound-change-exposure, design-recovery-first, inventory-before-destroy, prefer-reversible-removal, separate-containment-from-cause | Any live change, rollout, deletion, incident, drift, or evidence reused across contexts. |
+| Infra | act-through-the-narrowest-identity, prove-consumer-outcomes, bind-evidence-to-context, verify-the-negative-space, leave-no-residue, reconcile-before-retrying, bound-retries, assign-one-state-owner, preserve-compatible-transitions, bound-change-exposure, design-recovery-first, inventory-before-destroy, prefer-reversible-removal, separate-containment-from-cause | Any live change, rollout, deletion, incident, drift, retry, or evidence reused across contexts. |
 
 One tension is worth knowing. `principle-never-block-on-the-human` says to proceed on reversible work without asking. In work-mode, "reversible" is decided by the contract's checklist with evidence, not by the agent's feeling. The index line says so.
 
@@ -48,4 +48,4 @@ You skipped this when ...   an observable sign it was not
 
 ## Why user-only
 
-Upstream ships every pstack skill with `disable-model-invocation: true`: Poteto Mode loads them from its router when a trigger fires, so they never sit in every session's skill list. work-mode keeps that intent. None of the 35 leaves costs context until work-mode reads one, and you can still run any of them yourself with `/name`. When a vendored skill tells the agent to use another one (`teach` runs `how` and `why`), the agent reads that skill's `SKILL.md` by path too; `references/host-notes.md` says so.
+Upstream ships every pstack skill with `disable-model-invocation: true`: Poteto Mode loads them from its router when a trigger fires, so they never sit in every session's skill list. work-mode keeps that intent. None of the 38 leaves costs context until work-mode reads one, and you can still run any of them yourself with `/name`. When a vendored skill tells the agent to use another one (`teach` runs `how` and `why`), the agent reads that skill's `SKILL.md` by path too; `references/host-notes.md` says so.

@@ -16,7 +16,7 @@ reference         a step points at it            contract, handoff, journal, hos
 script            a step runs it                 journal.py, check_handoff.py
 ```
 
-The router is a table of contents with teeth. Each line in its index is one sentence: the principle's name, when it applies, and for pstack principles the limit that holds on live systems. The full reasoning stays in the leaf, so a simple task does not pay for eleven infra rules it never touches.
+The router is a table of contents with teeth. Each line in its index names the principle and when it applies, then adds the limit that holds on live systems (pstack principles) or the rule itself (infra principles). The full reasoning stays in the leaf, so a simple task does not pay for fourteen infra rules it never touches.
 
 ## The todolist rule
 

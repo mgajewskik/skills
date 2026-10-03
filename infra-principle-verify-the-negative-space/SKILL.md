@@ -20,6 +20,7 @@ A positive check on the intended set passes even when the blast radius was the w
 2. Write the expectation into the handoff's `## Must not change` or the journal entry's verification: exact counts after the change, named neighbours that stay identical, and paths that must still be refused or still be served.
 3. After execution, take the same snapshot with the same query and diff. Expect exactly the approved identifiers to differ.
 4. Record each negative-space claim in the journal separately from the positive acceptance claims. A neighbour you could not observe is `unverified`, not assumed unchanged.
+5. Count what the work itself left behind (flags, tunnels, temporary resources, scaled replicas) as part of the neighbourhood; `infra-principle-leave-no-residue` keeps that list.
 
 The test: if the action had touched one extra resource, which check would fail? If none, the verification is incomplete.
 

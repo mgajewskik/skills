@@ -10,7 +10,7 @@ Part of `work-mode`; follow its `references/contract.md` (in this catalog: `../w
 
 ## Why
 
-Google describes canaries as partial deployments evaluated over time. Population, workload diversity, duration, metrics, and shared failure domains determine whether the comparison is meaningful. [Canarying Releases](https://sre.google/workbook/canarying-releases/).
+Google describes canaries as partial deployments evaluated over time. Population, workload diversity, duration, metrics, and shared failure domains determine whether the comparison is meaningful. [Canarying Releases](https://sre.google/workbook/canarying-releases/). AWS lists "You perform rapid follow-on deployments without allowing for bake time" as an anti-pattern ([REL08-BP05](https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_tracking_change_management_automated_changemgmt.html)). After automation erased disks across a fleet because "the empty set was used as a special value, interpreted to mean 'everything'", Google added "sanity checks—including rate limiting" to it ([Automation at Google](https://sre.google/sre-book/automation-at-google/)).
 
 ## Pattern
 
@@ -18,9 +18,10 @@ Google describes canaries as partial deployments evaluated over time. Population
 2. Choose the smallest representative rollout unit. Check shared databases, control planes, identity, network, and storage before claiming isolation.
 3. Define consumer acceptance, forbidden outcomes, baseline/control, observation window, coverage, and explicit stop thresholds before exposure. Explain why those choices fit this workload.
 4. Observe the approved unit before expanding it. Check common degradation as well as canary/control differences. Bind the gate to the current target/revision.
-5. Halt expansion on failed criteria, contaminated comparison, drift, uncertain outcome, or missing evidence. No automatic retry follows. A unit you executed is reverted from the journal when its stop condition fires; the user chooses any other recovery.
+5. Let each unit bake before the next change lands on the same target, so the next change does not mask the previous one's effect. A configuration or flag push is a rollout and gets units of its own.
+6. Halt expansion on failed criteria, contaminated comparison, drift, uncertain outcome, or missing evidence. No automatic retry follows. A unit you executed is reverted from the journal when its stop condition fires; the user chooses any other recovery.
 
-The same logic applies to batch destruction: delete the smallest representative batch, verify, then widen.
+The same logic applies to bulk changes and batch destruction: resolve the selector to a counted list first (an empty or unexpectedly large set stops the step), cap how many targets each batch and each minute touch, verify the smallest representative batch, then widen.
 
 The test: if this change is broken in the way you fear most, would the first unit show it before the second unit starts? If not, the unit is not representative or the gate watches the wrong signal.
 

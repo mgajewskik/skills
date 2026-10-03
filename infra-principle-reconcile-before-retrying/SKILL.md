@@ -26,4 +26,4 @@ You skipped this when a retry, executed or handed over, follows a timeout or par
 
 ## Stop and limit
 
-Unresolved completion state or changed intent halts a blind retry. Verified safe repetition may avoid additional reconciliation only within that operation's proven contract. Controller convergence is not consumer acceptance; persistent failure may reflect permissions, dependencies, or conflicting writers. No retry token or controller grants authority.
+Unresolved completion state or changed intent halts a blind retry. Verified safe repetition may avoid additional reconciliation only within that operation's proven contract. Controller convergence is not consumer acceptance; persistent failure may reflect permissions, dependencies, or conflicting writers. No retry token or controller grants authority. Once a repeat is safe, how many attempts and how fast is `infra-principle-bound-retries`.

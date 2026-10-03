@@ -24,6 +24,8 @@ The Principles below ground every trigger. In your reply, name each principle th
 | Long, autonomous, or multi-phase work; anything the user reviews after stepping away; any incident | A decision trail with the **show-me-your-work** skill. |
 | Any live change: apply, deploy, restart, reload, scale, permission or network change, data write | Classify it per the contract. Reversible: snapshot, `scripts/journal.py record change`, then execute and verify. Irreversible, or production without a grant: a [handoff](references/handoff.md) the user executes; you verify. |
 | Wording that means removal: "clean up", "prune", "decommission", "tear down", "free up" | The Teardown playbook, whatever the phrasing. |
+| Active consumer impact: "prod is down", users affected, an alert reporting consumer-facing symptoms | The Incident playbook: offer containment before diagnosis (**infra-principle-separate-containment-from-cause**). |
+| A timeout, a partial run, "just rerun it", or any retry or polling loop | **infra-principle-reconcile-before-retrying** before a repeat, then **infra-principle-bound-retries** for how many and how fast. Repeating a live change is a new decision for the user. |
 | A claim that something works, is fixed, is safe, or is done | Evidence bound to target, revision, time, and probe location. Missing evidence is `unverified`, never a pass. |
 | A gate: next rollout unit, acceptance, close | `scripts/journal.py check` for every claim on the current revision. Exit 0 only. |
 | Any command you are about to run or hand over | Inspect its effects first. A tool named `status`, `plan`, `check`, or `dry-run` can still lock, write, call providers, or print secrets. |
@@ -34,7 +36,7 @@ The Principles below ground every trigger. In your reply, name each principle th
 
 ## Principles
 
-Read the leaf (`../<name>/SKILL.md`) in full for any principle you apply. Each entry names when it applies; pstack entries add, after "Live:", the limit that holds on live systems. [principles.md](references/principles.md) covers the other pstack skills the playbooks use.
+Read the leaf (`../<name>/SKILL.md`) in full for any principle you apply. Each entry names when it applies; pstack entries add, after "Live:", the limit that holds on live systems, and infra entries add the rule. [principles.md](references/principles.md) covers the other pstack skills the playbooks use.
 
 **Core**
 
@@ -73,17 +75,20 @@ Read the leaf (`../<name>/SKILL.md`) in full for any principle you apply. Each e
 
 **Infra**
 
-- **infra-principle-prove-consumer-outcomes**. Declaring something works, closing an incident, accepting a rollout.
-- **infra-principle-bind-evidence-to-context**. Comparing observations or reusing evidence, verdicts, approvals, or grants across hosts, identities, revisions, or time.
-- **infra-principle-verify-the-negative-space**. Accepting any live change, rollout, or destruction.
-- **infra-principle-reconcile-before-retrying**. Timeout, partial run, or desired state differing from runtime.
-- **infra-principle-assign-one-state-owner**. Two writers (IaC, GitOps, controller, human) on one resource or field.
-- **infra-principle-preserve-compatible-transitions**. Mixed versions, persisted formats, retiring a contract.
-- **infra-principle-bound-change-exposure**. Expanding a rollout or batch, or a production experiment.
-- **infra-principle-design-recovery-first**. Any change with availability, storage, data, or external side effects.
-- **infra-principle-inventory-before-destroy**. Any deletion, however phrased.
-- **infra-principle-prefer-reversible-removal**. A deletion is selected and a reversible stage exists.
-- **infra-principle-separate-containment-from-cause**. Impact cannot wait for diagnosis, or a restart restored service.
+- **infra-principle-act-through-the-narrowest-identity**. The first live command of a task, and right before any apply, destroy, or bulk change. Name the identity and the resolved target, use the narrowest identity for the step, and rely on platform-enforced guards.
+- **infra-principle-prove-consumer-outcomes**. Saying it works, closing an incident, accepting a rollout. Check the named consumer's actual result and one forbidden result; a status, exit code, or running process is not that result.
+- **infra-principle-bind-evidence-to-context**. Writing an evidence record or journal entry, reusing evidence, a verdict, an approval, or a grant, or joining outputs from different hosts, contexts, identities, revisions, or times. Attach target, revision, time, and probe location; reject a join whose contexts differ.
+- **infra-principle-verify-the-negative-space**. Accepting any live change, rollout, or destruction. Snapshot the neighbours before, diff after; exactly the approved identifiers differ.
+- **infra-principle-leave-no-residue**. A diagnostic that opens, mounts, or starts something, and closing any diagnosis, repair, rollout, or incident. Preserve fragile state first; remove or hand over everything the work created.
+- **infra-principle-reconcile-before-retrying**. A timeout, "failed halfway", "just rerun it", a stale lock, resources stuck pending, or desired state differing from runtime. Inventory what completed before any repeat.
+- **infra-principle-bound-retries**. Any retry or polling loop, run by you or written into code. Transient errors only, backoff with jitter, a cap, one layer.
+- **infra-principle-assign-one-state-owner**. Two writers on one resource or field: IaC or configuration management (Terraform, Ansible), GitOps (Argo CD, Flux), a controller, operator, or autoscaler, or a human; or a change that "reverted itself". Name every writer and which one wins the next reconcile.
+- **infra-principle-preserve-compatible-transitions**. Mixed versions, a schema or format change, retiring an endpoint or contract. Every intermediate state, and the version you would recover to, reads what exists at that moment.
+- **infra-principle-bound-change-exposure**. A rollout past one unit, a bulk change, a config or flag push, a production experiment. A representative first unit, with stop thresholds and bake time set before exposure.
+- **infra-principle-design-recovery-first**. A change touching availability, storage, data, access, or external side effects. Name what restores it, what cannot come back, what recovery depends on, and the evidence the restore works.
+- **infra-principle-inventory-before-destroy**. Any deletion, however phrased. Resolve every selector to a counted list of exact identifiers before drafting a command.
+- **infra-principle-prefer-reversible-removal**. A deletion is chosen and a reversible stage exists. Disable, deny, or scale to zero first, watch for hidden consumers, then hand over the destroy.
+- **infra-principle-separate-containment-from-cause**. "Prod is down", users affected, impact that cannot wait for diagnosis, or "a restart fixed it". Offer containment now; report cause confidence as a separate answer.
 
 ## Authority
 

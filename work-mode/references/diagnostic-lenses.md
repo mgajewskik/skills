@@ -22,7 +22,7 @@ Select the lens that separates the leading hypothesis from its strongest alterna
 | Isolation and namespace | Does the caller share the process's mount, network, user, cluster, or account context? Does the name resolve to the same object there? | A host observation proves container or pod behavior. |
 | State and storage | Which resolved path, volume, mount, object version, lock, or lease does the consumer use? Which storage limit applies? | The object exists, so the consumer can use it; deleting it tests a stale-state theory. |
 | Network and protocol | At which boundary do resolution, routing, connection, TLS, protocol, or authorization fail for this caller? | A listener or one successful probe from elsewhere proves the consumer path. |
-| Resource pressure | Does a scoped window show the relevant process or quota limit coinciding with failure? | A global average proves or excludes a short local event. |
+| Resource pressure | For each resource on the failing path (CPU, memory, disk, network, file descriptors, connection pools, quotas), what are its utilization, saturation (queued work), and errors in a scoped window, and does one coincide with the failure? | A global average proves or excludes a short local event. |
 | Concurrency and ownership | Which writer last changed the shared object? Are observations from different revisions or actors? | A retry is safe because the operation looks idempotent. |
 | Time | Do the failure, the change, the cache TTL, the certificate validity, and the reconcile interval line up? | Correlation in time proves cause. |
 

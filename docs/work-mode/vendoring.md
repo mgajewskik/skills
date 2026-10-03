@@ -60,6 +60,6 @@ Then record the new commit here.
 
 ## User-only skills
 
-- `work-mode` and the 11 `infra-principle-*` leaves: written here, user-only, read by path from work-mode.
+- `work-mode` and the 14 `infra-principle-*` leaves: written here, user-only, read by path from work-mode.
 - Every pstack skill, because upstream ships them that way; work-mode reads the ones it needs by path.
 - Matt Pocock's `grill-me`, `grill-with-docs`, `wayfinder`, and `to-questionnaire`, because upstream ships them that way (with their own `openai.yaml`).

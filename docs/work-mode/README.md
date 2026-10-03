@@ -45,7 +45,7 @@ work-mode/
   playbooks/infra/*.md      8 playbooks for live systems and infrastructure source
   references/               contract, handoff, journal, host notes, and lookup pages
   scripts/                  journal.py, check_handoff.py, watch_pr.py, and their tests
-infra-principle-*/          11 production principles, user-only, read by path
+infra-principle-*/          14 production principles, user-only, read by path
 principle-*/ and others     pstack skills (user-only upstream), fetched by scripts/update-skills.sh
 scripts/check_work_mode.py  structural checker for all of the above
 ```

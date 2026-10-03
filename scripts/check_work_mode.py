@@ -92,8 +92,8 @@ def check(root):
         errors.append(f"installed {name} is missing from the work-mode index")
 
     leaves = sorted(name for name in installed if name.startswith("infra-principle-"))
-    if len(leaves) != 11:
-        errors.append(f"expected 11 infra-principle leaves, found {len(leaves)}")
+    if len(leaves) != 14:
+        errors.append(f"expected 14 infra-principle leaves, found {len(leaves)}")
     for name in leaves:
         text = (root / name / "SKILL.md").read_text()
         meta = frontmatter(text)
@@ -168,7 +168,7 @@ def main(argv=None):
     if errors:
         print("FAIL\n" + "\n".join(errors))
         return 1
-    print("PASS: 16 code and 8 infra playbooks, 11 infra leaves, index and links resolve. Structural checks only.")
+    print("PASS: 16 code and 8 infra playbooks, 14 infra leaves, index and links resolve. Structural checks only.")
     return 0
 
 

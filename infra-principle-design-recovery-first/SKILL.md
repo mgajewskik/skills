@@ -10,15 +10,16 @@ Part of `work-mode`; follow its `references/contract.md` (in this catalog: `../w
 
 ## Why
 
-Google emphasizes actual end-to-end recovery evidence, including usable backups, resources, timing, and dependencies. AWS verifies rollback compatibility before deployment. [Data Integrity](https://sre.google/sre-book/data-integrity/), [Rollback safety](https://d1.awsstatic.com/builderslibrary/pdfs/ensuring-rollback-safety-during-deployments.pdf).
+Google emphasizes actual end-to-end recovery evidence, including usable backups, resources, timing, and dependencies. AWS verifies rollback compatibility before deployment. [Data Integrity](https://sre.google/sre-book/data-integrity/), [Rollback safety](https://d1.awsstatic.com/builderslibrary/pdfs/ensuring-rollback-safety-during-deployments.pdf). AWS designs for static stability, where recovery takes no "deliberate control plane dependencies, such as provisioning new infrastructure or making modifications" during an impairment ([Static stability](https://aws.amazon.com/builders-library/static-stability-using-availability-zones/)), and lists emergency access that depends "on the same systems (such as a centralized identity provider) as your normal access mechanisms" as an anti-pattern ([SEC03-BP03](https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_permissions_emergency_process.html)).
 
 ## Pattern
 
 1. Define the recovery destination and correct consumer behavior. Name owner, prerequisites, access dependencies, and accepted time/data-loss limits.
 2. Enumerate reversible state and irreversible external effects. A previous config cannot recover removed data or unsend a webhook.
 3. Find current recovery evidence applicable to this artifact, data format, target, and dependencies. Backup existence alone is insufficient. If rehearsal is needed, propose a scoped plan; it runs under the contract's authority rule.
-4. Describe recovery steps, stop conditions, residual risk, and bounded verification. Distinguish rollback, restore, roll-forward repair, and compensation when their effects differ.
-5. Mark unsupported recovery capability unverified. A change without verified recovery fails the reversibility checklist, so it is user-executed, and the user explicitly accepts the limits or picks a safer alternative.
+4. Check what the recovery path itself depends on. A path that needs the impaired control plane, the failing identity provider, or the access this change modifies (a firewall rule, an IAM policy, an SSH or API config) can fail exactly when it is needed; prefer a path prepared before the change.
+5. Describe recovery steps, stop conditions, residual risk, and bounded verification. Distinguish rollback, restore, roll-forward repair, and compensation when their effects differ.
+6. Mark unsupported recovery capability unverified. A change without verified recovery fails the reversibility checklist, so it is user-executed, and the user explicitly accepts the limits or picks a safer alternative.
 
 The test: when was this recovery path last exercised for this data format and size, and what did it restore? "We have backups" with no answer is `unverified`.
 
