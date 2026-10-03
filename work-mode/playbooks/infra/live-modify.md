@@ -1,0 +1,13 @@
+# Live modify
+
+For a direct change to a running system outside its normal source-and-rollout path: set a value, scale, restart, grant access, flip a flag, hand-patch a resource. The deliverable is the change made through the right path (journaled and executed, or handed over), verification that exactly the intended change happened, and a decision about the source of truth. A live edit nobody writes back is drift waiting to revert or surprise.
+
+1. **Find the owner of the field.** Which source (IaC, GitOps, controller, configuration management, human) declares this value, and what reconciles it? If a reconciler owns it, the edit will be undone or fought; prefer Change plus Deploy, or have the user pause or transfer ownership first per **infra-principle-assign-one-state-owner**. Done when every writer of the field is listed.
+2. **Capture the current value as the snapshot.** Read it from the authoritative reader, bound to target and time, and save it redacted under `.work-mode/snapshots/`. Write the revert command that restores exactly this value. Done when the revert could run without guessing.
+3. **Specify the change.** Exact target identifiers, exact new value, predicted consumer effect, and how long until it takes effect (reload, restart, propagation). Prefer a conditional form that applies only if the value is still what you read, when the platform offers one.
+4. **Write verification and negative space before execution.** The consumer-level check that would stay red if the change were a no-op (**infra-principle-prove-consumer-outcomes**), the neighbours that must stay identical (**infra-principle-verify-the-negative-space**), and the reconcile interval after which you look again.
+5. **Classify and execute or hand over.** Run the contract's reversibility checklist. Revoking access, rotating a secret, or anything that loses state or notifies people is irreversible. Reversible, and outside production or inside a grant: `journal.py record change`, execute exactly that command, record the result. Otherwise: a `modify` handoff (or `contain` during an incident), linted and fingerprinted; the user approves and executes.
+6. **Verify.** Re-read the live value, run the consumer check, diff the negative space, and look again after one reconcile interval to catch a silent revert. Record each claim. A failed check on a change you executed: revert it from the journal and report.
+7. **Close the loop on source.** Either a Change that writes the value back to the source of truth, or a recorded drift item with owner and revisit date. The user chooses.
+
+**Reply.** Old value, new value, journal id or handoff fingerprint, owner of the field, verification and negative-space results, revert observed or not, and the source-of-truth decision.

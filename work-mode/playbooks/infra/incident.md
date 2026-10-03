@@ -1,0 +1,14 @@
+# Incident
+
+For active consumer impact. The deliverable is impact reduced through a containment, verified at the consumer, with cause confidence tracked separately. Do not hold a containment option back until diagnosis is complete, and do not call containment a root cause. Urgency shortens prose, never the authority rule.
+
+1. **Establish impact and command.** Who is affected and how, since when, the incident owner, the permitted response, and the channel. Open the decision trail now with a `start` row; every action and observation gets a timestamped row. Done when impact is a sentence with a number or scope in it.
+2. **Preserve the smallest evidence.** Before containment changes the system, capture the bounded signals that would otherwise be lost (the failing request, the current revision and config, the relevant window of errors). No unrestricted log or secret dumps.
+3. **Offer containment.** One to three bounded options (shift traffic, roll back to the last accepted revision, disable a feature, shed load, restart), each with expected effect, risk, reversibility class, recovery, and the signal that shows it worked. Per **infra-principle-separate-containment-from-cause**.
+4. **Contain.** Outside production, a reversible option may be journaled and executed by the agent; say which and why in one line before running it. In production the user chooses, and the containment is a `contain` handoff the user executes, unless a recorded grant covers it and it passes the reversibility checklist. A restart that drops in-flight work or state fails the checklist.
+5. **Verify containment at the consumer.** Record residual impact. Improvement after a restart or rollback establishes recovery, not cause.
+6. **Diagnose.** Run Debug on the preserved evidence and current state. Keep competing hypotheses open; the incident does not need a single cause to close.
+7. **Hand off durable work.** Prevention goes to Change and Deploy; a temporary workaround gets an owner and an expiry or revisit condition, and journaled containment stays listed in `journal.py list` until reverted or adopted into source. At a shift change, write a resume note: what changed on which targets, what did not, the open hypotheses, and the next observation.
+8. **Close.** Timeline from the trail and journal, containment evidence, cause and its confidence, open unknowns, and each recurring lesson encoded as a check, alert, or protection rather than a sentence (**principle-encode-lessons-in-structure**).
+
+**Reply.** Impact now versus at start, containment with journal id or fingerprint and its evidence, cause status (established, leading hypothesis, or unknown), open risks, and the next action.

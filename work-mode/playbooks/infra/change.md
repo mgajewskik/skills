@@ -1,0 +1,13 @@
+# Change
+
+The deliverable is a local, reviewed, verified change to infrastructure source, ready to roll out. Only the files the user asked about change. Nothing is applied, initialized against a real backend, installed, or deployed here; rollout is the Deploy playbook.
+
+1. **Record the baseline.** Working tree status, pre-existing staged and unstaged edits, and the scoped files' current content. Name the files you own and preserve everything else. Done when you can tell your diff apart from anyone else's.
+2. **Read the contract around the target.** Producers, consumers, overrides, generated outputs, existing checks, and installed tool versions. Read any validator, renderer, or hook before running it; a local checkout can still call remote backends. Done when every check you plan to run is classified as local-only or as a read-only remote call the contract allows.
+3. **Write criteria and make them red.** Binary criteria and anti-criteria, including one that catches a misleading pass (schema-valid but semantically wrong). For a defect, reproduce it with a saved fixture or deterministic local render first. Done when the check fails on the current source for the reason you expect.
+4. **Name the shape.** Environment identity, resource ownership, inputs and overrides, allowed states. Resolve each decision in one place. For a novel consequential design, compare two or three genuinely different sketches; for a mechanical edit, follow the existing pattern.
+5. **Make the smallest correct change.** Subtract what this change makes obsolete in source; keep compatibility paths and operational comments whose consumers you have not inventoried. For a refactor, pin the rendered output first and require it byte-identical afterwards.
+6. **Verify offline in units.** Inspect the actual rendered or generated output against an independently derived expectation. Exercise an accepted input, a rejected input, and the plausible wrong result. For generators, run twice and from a partial state. A skipped or unavailable check is `unverified`. Done when every criterion is green or explicitly unverified with the reason.
+7. **Independent review** for significant behavior, security or permission, data, deployment, or agent-rule changes. The reviewer gets criteria, anti-criteria, all scoped paths, and evidence pointers, not your conclusion. Done on `Decision: PASS` or an explicit user waiver.
+
+**Reply.** Changed files, criteria and anti-criteria status, checks actually run, review verdict, and what remains unproven at runtime. Commits and pushes follow the contract's git rules; rollout goes to Deploy with this artifact's revision.
