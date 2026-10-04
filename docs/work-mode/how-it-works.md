@@ -51,13 +51,13 @@ Some triggers fire on any task, whichever playbook matched: `how` before a nontr
 
 ## Staying on
 
-Invoking `/work-mode` in Claude Code registers a `UserPromptSubmit` hook from the skill's frontmatter. For the rest of the session, every prompt gets a one-line reminder to match a playbook and apply the triggers on a new task, and to skip that on a casual turn. A new `claude` session starts without it. Codex has no equivalent, so retype `work-mode` when a new task starts there.
+Invoking `/work-mode` in Claude Code registers a `UserPromptSubmit` hook from the skill's frontmatter. For the rest of the session, every prompt gets a one-line reminder to match a playbook and apply the triggers on a new task, and to skip that on a casual turn. A new `claude` session starts without it. Codex has hooks but no skill or agent hook, so a reminder there would fire outside work-mode; work-mode registers none, and you retype `work-mode` when a new task starts there.
 
 Code and infra playbooks stay separate on purpose. Infra Debug is strictly read-only and never turns into a fix; code Bug fix reproduces and fixes in one flow. Merging them would blur that line.
 
 ## Subagents
 
-- Delegates run as `work-agent` (`~/.agents/agents/work-agent.md` for Claude Code, `work-agent.toml` for Codex). Its only job is to read work-mode's `SKILL.md` first and route the brief to a playbook, so a delegate works under the same rules as the lead. It is the port of Poteto's `poteto-agent`.
+- Delegates run as `work-agent` (`~/.agents/agents/work-agent.md` for Claude Code and Grok, `work-agent.toml` for Codex, each copied into the harness's agents directory). Its only job is to read work-mode's `SKILL.md` first and route the brief to a playbook, so a delegate works under the same rules as the lead. A delegate briefed to implement a scoped change does it itself rather than delegating again. It is the port of Poteto's `poteto-agent`.
 - Fresh by default, with the full brief and every later directive, so nothing is lost between rounds.
 - The lead owns the output: it reviews the diff and writes its own summary.
 - A reviewer is never the author, gets criteria and evidence rather than the author's conclusion, and runs on a different model when the host offers one.
