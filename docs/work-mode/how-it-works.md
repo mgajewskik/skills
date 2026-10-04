@@ -33,6 +33,8 @@ The reply names each principle that shaped a decision and what it changed. The a
 ```text
 task
   |
+  +-- SIMPLE local edit (never live) -------> just do it and run its check; contract still binds
+  +-- read-only question, any target -------> Investigation (live behavior: infra Debug)
   +-- application code ---------------------> playbooks/code/
   +-- live system or infrastructure source --> playbooks/infra/
   +-- mixed ("fix the module, roll it out") -> start where the failure is observed,
@@ -45,7 +47,7 @@ task
 
 Removal wording ("clean up", "prune", "tear down") sends live resources, data, access, and environments to Teardown. Cleaning up code is Refactoring.
 
-Some triggers fire on any task, whichever playbook matched: `how` before a nontrivial change or judgment, `architect` for code that crosses a function boundary, `swarm` or `arena` for parallel fan-out, `interrogate` for a contested design, the throughput checkpoint for multi-step work, driving the real surface for repros, Babysit for any PR-status request, skeptical triage for review-bot comments, and the `commit` skill for every commit message. The trigger table in `SKILL.md` lists them all.
+Some triggers fire on any task, whichever playbook matched: `how` before a nontrivial change or judgment, `architect` for code that crosses a function boundary (both skipped for a SIMPLE change), `swarm` or `arena` for parallel fan-out, `interrogate` for a contested design, the throughput checkpoint for multi-step work, driving the real surface for repros, Babysit for any PR-status request, skeptical triage for review-bot comments, and the `commit` skill for every commit message. The trigger table in `SKILL.md` lists them all.
 
 ## Staying on
 

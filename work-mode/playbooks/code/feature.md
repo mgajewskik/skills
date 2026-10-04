@@ -1,6 +1,6 @@
 # Feature
 
-**You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
+**You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead. A SIMPLE change (**Size the task first** in work-mode's `SKILL.md`) skips this playbook's steps and delegation.
 
 1. `how` over the affected subsystem.
 2. `architect` for parallel design exploration.
