@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""Watch a GitHub pull request, or the stack it belongs to, until it is merge-ready or blocked.
+"""Watch a GitHub pull request, or the stack it belongs to, until it is READY or blocked.
 
 Read-only: it runs `gh pr view`, `gh pr list`, `gh pr checks`, `gh api graphql` queries, and
 `git remote get-url`. It never merges, comments, edits, or reruns anything.
@@ -30,11 +30,12 @@ import time
 from dataclasses import asdict, dataclass, field
 
 REVIEW_THREADS_QUERY = """
-query($owner: String!, $repo: String!, $pr: Int!) {
+query($owner: String!, $repo: String!, $pr: Int!, $after: String) {
   viewer { login }
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id isResolved
           comments(first: 1) { totalCount nodes { databaseId body path line author { login } } }
@@ -340,7 +341,20 @@ class GhReader:
             after = page["endCursor"]
 
     def review_threads(self, owner, repo, number):
-        return parse_threads(self.graphql(REVIEW_THREADS_QUERY, owner, repo, number))
+        nodes, after = [], None
+        while True:
+            extra = {"after": after} if after else {}
+            data = self.graphql(REVIEW_THREADS_QUERY, owner, repo, number, **extra)
+            try:
+                threads = data["data"]["repository"]["pullRequest"]["reviewThreads"]
+                nodes += threads["nodes"]
+                page = threads.get("pageInfo") or {}
+            except (KeyError, TypeError, AttributeError):
+                raise QueryError("review threads: unexpected response shape") from None
+            if not page.get("hasNextPage") or not page.get("endCursor"):
+                threads["nodes"] = nodes
+                return parse_threads(data)
+            after = page["endCursor"]
 
     def commit_rollups(self, owner, repo, number):
         data = self.graphql(COMMIT_ROLLUPS_QUERY, owner, repo, number)

@@ -154,7 +154,7 @@ Large or cross-cutting work (a migration across many call sites, an ambitious mu
 - **Prototype.** A throwaway sketch to settle a design or empirical fork by observing it. `prototype.md`.
 - **Authoring a skill.** Writing or editing a SKILL.md. `authoring-a-skill.md`.
 - **Eval.** Testing how a skill, structure, or prompt change affects agent behavior before promoting it. `eval.md`.
-- **Babysit.** Driving a GitHub PR or stack to merge-ready: conflicts, review threads, CI. Never merges. `babysit.md`.
+- **Babysit.** Driving a GitHub PR or stack to `READY` (merge-ready only on `CLEAN`): conflicts, review threads, CI. Never merges. `babysit.md`.
 - **Autonomous run.** A long task driven to a predicate without stopping ("run until done"). `autonomous-run.md`.
 - **Session pickup.** Resuming a prior session's in-flight work. `session-pickup.md`.
 - **Pause safely.** Suspending work so a cold start can resume it. `pause-safely.md`.

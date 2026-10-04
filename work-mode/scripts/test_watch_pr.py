@@ -412,6 +412,25 @@ class ReadOnlyTest(unittest.TestCase):
             self.assertTrue(query.lstrip().startswith("query"))
             self.assertNotIn("mutation", query)
 
+    def test_review_threads_follow_every_page(self):
+        def page(ids, resolved, next_cursor):
+            return {"data": {"viewer": {"login": "me"}, "repository": {"pullRequest": {"reviewThreads": {
+                "pageInfo": {"hasNextPage": bool(next_cursor), "endCursor": next_cursor},
+                "nodes": [{"id": i, "isResolved": resolved, "comments": {"totalCount": 1, "nodes": [
+                    {"databaseId": 1, "body": "fix this", "path": "a.py", "line": 1,
+                     "author": {"login": "rev"}}]}} for i in ids]}}}}}
+        pages = [page([str(n) for n in range(100)], True, "c1"), page(["late"], False, None)]
+        calls = []
+
+        def fake_run(argv, **kwargs):
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, 0, json.dumps(pages[len(calls) - 1]), "")
+
+        with mock.patch.object(watch_pr.subprocess, "run", side_effect=fake_run):
+            threads = watch_pr.GhReader().review_threads("acme", "app", 7)
+        self.assertEqual([t.id for t in threads], ["late"])
+        self.assertIn("after=c1", calls[1])
+
 
 if __name__ == "__main__":
     unittest.main()

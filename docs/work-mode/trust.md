@@ -40,7 +40,7 @@ Prose can be skimmed; scripts cannot. Each guard below has a test in `work-mode/
 | A malformed journal is noticed | every command fails loudly on bad JSON, unknown kinds, or unknown fields |
 | A revert plan never re-applies a revert | `journal.py revert-plan` skips changes that are themselves reverts |
 | Babysit's status tool cannot change a PR | `watch_pr.py` runs only `gh pr view/list/checks`, GraphQL queries, and `git remote get-url`; a test records every command it issues |
-| "Ready" means GitHub agrees | `watch_pr.py` waits while GitHub's mergeability is `UNKNOWN`, and reports a merge refused over a failing head commit even when the check list looks green |
+| `READY` means nothing the agent can fix is left, and shows what GitHub still holds | `watch_pr.py` waits while GitHub's mergeability is `UNKNOWN`, reports a merge refused over a failing head commit even when the check list looks green, reads every page of review threads, and carries `mergeState` and `reviewDecision` in each row (a required review can still be outstanding at `READY`) |
 | A handoff is complete and names exact targets | `check_handoff.py check`: required sections, no placeholders, no wildcards, count matches |
 
 ## What nothing can enforce
