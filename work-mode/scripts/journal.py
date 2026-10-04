@@ -17,7 +17,8 @@ revert-plan      newest first, the revert command and snapshot of each change no
 list             changes and their latest status.
 init             create ./.work-mode/ and exclude it from git, before writing anything there.
 
-Verifier and owner evidence outranks agent evidence. The claim owner-approved is answered
+A failed or unverified entry blocks until a later success from an author of equal or higher rank
+(agent < verifier < owner) clears it. The claim owner-approved is answered
 only by approval entries. Values that look like secrets are rejected.
 """
 
@@ -35,7 +36,7 @@ ENVIRONMENTS = ("production", "staging", "development")
 CHANGE_STATUSES = ("pending", "done", "failed", "reverted")
 EVIDENCE_STATUSES = ("established", "failed", "unverified")
 SOURCES = ("agent", "verifier", "owner")
-RANK = {"agent": 0, "verifier": 1, "owner": 1}
+RANK = {"agent": 0, "verifier": 1, "owner": 2}
 EXIT = {"established": 0, "unverified": 2, "failed": 3}
 FIELDS = {
     "change": {"kind", "id", "ts", "created", "cwd", "env", "grant", "target", "command", "snapshot", "revert",
@@ -257,8 +258,11 @@ def check(args):
     if not rows:
         print("NOT-VERIFIED: no entry for this target, revision, and claim")
         return 2
-    top = max(RANK[r["by"]] for r in rows)
-    decisive = [r for r in rows if RANK[r["by"]] == top][-1]
+    # A failed or unverified entry blocks until a later success from an author of equal or higher
+    # rank clears it. With nothing blocking, the newest entry (a success) decides.
+    blocking = [r for i, r in enumerate(rows) if r["status"] != "established"
+                and not any(s["status"] == "established" and RANK[s["by"]] >= RANK[r["by"]] for s in rows[i + 1:])]
+    decisive = blocking[-1] if blocking else rows[-1]
     if args.max_age_hours is not None:
         age = datetime.datetime.now(datetime.timezone.utc) - parse_ts(decisive["ts"])
         if age > datetime.timedelta(hours=args.max_age_hours):

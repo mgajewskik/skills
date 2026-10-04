@@ -41,7 +41,7 @@ The Principles below ground every trigger. In your reply, name each principle th
 | Active consumer impact: "prod is down", users affected, an alert reporting consumer-facing symptoms | The Incident playbook: offer containment before diagnosis (**infra-principle-separate-containment-from-cause**). |
 | A timeout, a partial run, "just rerun it", or any retry or polling loop | **infra-principle-reconcile-before-retrying** before a repeat, then **infra-principle-bound-retries** for how many and how fast. Repeating a live change is a new decision for the user. |
 | A claim that something works, is fixed, is safe, or is done | Evidence bound to target, revision, time, and probe location. Missing evidence is `unverified`, never a pass. |
-| A gate: next rollout unit, acceptance, close | `scripts/journal.py check` for every claim on the current revision. Exit 0 only. |
+| A gate on live work: next rollout unit, accepting a live change, closing a rollout or incident | `scripts/journal.py check --max-age-hours <observation window>` for every claim on the current revision. Exit 0 only. Local and read-only work closes on the checks and sources cited in the reply, without the journal. |
 | Any command you are about to run or hand over | Inspect its effects first. A tool named `status`, `plan`, `check`, or `dry-run` can still lock, write, call providers, or print secrets. |
 | A preview: plan, diff, dry run, render | State which engine produced it and what it cannot see (admission, quotas, provider defaults, ordering). Prefer the preview closest to the real engine. |
 | Two remedies that share a premise failed the same check | **principle-attack-the-premise**: census the affected actors before a third remedy. |

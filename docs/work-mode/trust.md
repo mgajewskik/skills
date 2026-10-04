@@ -31,7 +31,8 @@ Prose can be skimmed; scripts cannot. Each guard below has a test in `work-mode/
 | A live change has a snapshot file and a revert command before it runs | `journal.py record change` refuses otherwise |
 | A production change cites a recorded grant | `journal.py record change --env production` refuses without `--grant` |
 | Approvals come from you | `journal.py record approval` requires `--by owner`; the agent is told never to run it |
-| A self-report cannot hide a reviewer's failure | `journal.py check`: verifier and owner entries outrank agent entries |
+| A self-report cannot hide a reviewer's failure, and nobody overrules yours | `journal.py check`: a newer success cannot clear a `failed` from a higher-ranked author (agent < verifier < owner) |
+| An old success cannot hide a fresh failure | `journal.py check`: the newest `failed` or `unverified` entry blocks, whoever wrote it |
 | Evidence does not travel between revisions or targets | `journal.py check` matches target and revision exactly |
 | Secrets stay out of the journal | values and snapshot files that look like keys, tokens, passwords, or URL credentials are refused (a net, not a proof: redact first) |
 | "Revert everything since 9:00" means changes made since 9:00 | `revert-plan all-since` filters on each change's creation time, not its last update |

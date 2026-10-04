@@ -45,7 +45,7 @@ $J init                                                 # before writing any fil
 
 `--env` is `production`, `staging`, or `development`. An environment you cannot name is production.
 
-`check` exits 0 established, 2 not verified (no entry, or `unverified`), 3 failed, 4 stale. Verifier and owner entries outrank agent entries, so a self-report cannot hide a reviewer's `failed`. A different target or revision never matches. The claim `owner-approved` is answered only by `approval` entries for that exact fingerprint.
+`check` exits 0 established, 2 not verified (no entry, or `unverified`), 3 failed, 4 stale. A `failed` or `unverified` entry blocks until a later `established` from an author of equal or higher rank (agent < verifier < owner) clears it. So an old success cannot hide a fresh failure, a self-report cannot hide a reviewer's failure, and only your own newer entry clears yours. `--max-age-hours` turns a deciding entry older than the window into `STALE`; live gates pass it. A different target or revision never matches. The claim `owner-approved` is answered only by `approval` entries for that exact fingerprint.
 
 `revert-plan` lists changes whose latest status is not `reverted`, newest first by creation time (`all-since` and `list --since` filter on `created`, so a late result line does not pull an earlier change in), skipping changes that are themselves reverts. It prints the revert command and snapshot; it never executes anything.
 

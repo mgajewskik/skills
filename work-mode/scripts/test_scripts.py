@@ -214,6 +214,46 @@ class JournalEvidenceTest(JournalTestCase):
         self.record("r1", "consumer-ok", "established", "verifier")
         self.assertEqual(self.check("r1", "consumer-ok")[0], 0)
 
+    def test_verifier_row_cannot_override_owner_failure(self):
+        self.record("r1", "consumer-ok", "failed", "owner")
+        self.record("r1", "consumer-ok", "established", "verifier")
+        code, output = self.check("r1", "consumer-ok")
+        self.assertEqual(code, 3)
+        self.assertIn("by owner", output)
+
+    def test_older_owner_success_does_not_let_agent_clear_verifier_failure(self):
+        self.record("r1", "consumer-ok", "established", "owner")
+        self.record("r1", "consumer-ok", "failed", "verifier")
+        self.record("r1", "consumer-ok", "established", "agent")
+        code, output = self.check("r1", "consumer-ok")
+        self.assertEqual(code, 3)
+        self.assertIn("by verifier", output)
+
+    def test_owner_row_clears_own_earlier_failure(self):
+        self.record("r1", "consumer-ok", "failed", "owner")
+        self.record("r1", "consumer-ok", "established", "owner")
+        self.assertEqual(self.check("r1", "consumer-ok")[0], 0)
+
+    def test_later_agent_failure_overrides_earlier_verifier_success(self):
+        self.record("r1", "consumer-ok", "established", "verifier")
+        self.record("r1", "consumer-ok", "failed", "agent")
+        code, output = self.check("r1", "consumer-ok")
+        self.assertEqual(code, 3)
+        self.assertIn("by agent", output)
+
+    def test_later_agent_unverified_overrides_earlier_verifier_success(self):
+        self.record("r1", "consumer-ok", "established", "verifier")
+        self.record("r1", "consumer-ok", "unverified", "agent")
+        self.assertEqual(self.check("r1", "consumer-ok")[0], 2)
+
+    def test_max_age_applies_to_the_newest_success(self):
+        Path(self.path).parent.mkdir(parents=True)
+        old = {"kind": "evidence", "ts": "2000-01-01T00:00:00Z", "target": "prod/api", "revision": "r1",
+               "claim": "consumer-ok", "status": "established", "by": "verifier", "evidence": "old.txt"}
+        Path(self.path).write_text(json.dumps(old) + "\n")
+        self.record("r1", "consumer-ok", "established", "agent")
+        self.assertEqual(self.check("r1", "consumer-ok", "--max-age-hours", "1")[0], 0)
+
     def test_approval_counts_only_owner_entries(self):
         code, output = self.journal("record", "evidence", "--target", "prod/api", "--revision", "abc",
                                     "--claim", "owner-approved", "--status", "established", "--by", "agent",

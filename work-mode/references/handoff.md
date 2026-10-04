@@ -66,4 +66,4 @@ Before interpreting the user's execution report, recompute the fingerprint and r
 
 ## Recording verification
 
-After execution, record each acceptance criterion and each `Must not change` item as its own `evidence` entry against the revision that is now running: `--by agent` for your observations, `--by verifier` for an independent reviewer. `journal.py check` exits 0 only for `established`. The rollout or teardown is accepted only when every claim checks 0 for the current revision.
+After execution, record each acceptance criterion and each `Must not change` item as its own `evidence` entry against the revision that is now running: `--by agent` for your observations, `--by verifier` for an independent reviewer. `journal.py check` exits 0 only for `established`. The rollout or teardown is accepted only when every claim checks 0 for the current revision with `--max-age-hours <observation window>`.
