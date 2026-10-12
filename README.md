@@ -19,11 +19,12 @@ Compatible local agents discover skills from this shared location. External
 skills listed in `scripts/update-skills.sh` can be refreshed by running that
 script from a trusted checkout; it replaces only the listed skill directories.
 
-## work-mode
+## work
 
-`work-mode` is a user-triggered operating mode for code and infrastructure
-work: playbooks, principle skills, and per-action authority with a journal for
-reversible live changes. See [docs/work-mode](docs/work-mode/README.md).
+`work` is the work discipline for code, config, and infrastructure tasks:
+playbooks, engineering principles, and a `.work/` log for live changes and
+their reverts. See [work/SKILL.md](work/SKILL.md). Its principles are vendored
+from pstack by `work/scripts/update.sh`.
 
 ## License
 

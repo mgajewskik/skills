@@ -5,8 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Every skill keeps its upstream invocation setting; principle-* leaves also get hidden from the
-# slash menu (see hide_from_slash_menu). A user-only skill (frontmatter
+# Every skill keeps its upstream invocation setting. A user-only skill (frontmatter
 # "disable-model-invocation: true") never enters the model's skill list; the user names it,
 # or the agent reads its SKILL.md by path. A downloaded skill that names other user-only
 # skills gets a generated skill-paths.md with those paths (see write_skill_paths).
@@ -29,42 +28,20 @@ SKILLS=(
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder"
     "https://github.com/mattpocock/skills/tree/main/skills/productivity/to-questionnaire"
 
-    # pstack skills (all except poteto-mode, setup-pstack, make-bot-ui, automate-me)
+    # pstack skills (all except poteto-mode, setup-pstack, make-bot-ui, automate-me). The principle-*
+    # skills are vendored into work/principles/ by work/scripts/update.sh.
     "https://github.com/cursor/plugins/tree/main/pstack/skills/architect"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/arena"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/benchmark-checklist"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/blast-radius"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/bro"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/correct"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/create-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/figure-it-out"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/how"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/interrogate"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/maintain-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/no-comments"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-attack-the-premise"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-boundary-discipline"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-build-the-lever"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-encode-lessons-in-structure"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-exhaust-the-design-space"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-experience-first"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-explain-the-number"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-fix-root-causes"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-foundational-thinking"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-guard-the-context-window"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-laziness-protocol"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-make-operations-idempotent"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-migrate-callers-then-delete-legacy-apis"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-minimize-reader-load"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-model-the-domain"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-never-block-on-the-human"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-outcome-oriented-execution"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-prove-it-works"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-redesign-from-first-principles"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-separate-before-serializing-shared-state"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-sequence-verifiable-units"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-subtract-before-you-add"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-test-behavior-not-implementation"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-type-system-discipline"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/recall"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/reflect"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/show-me-your-work"
@@ -104,20 +81,6 @@ mirror_policy_for_codex() {
     fi
 }
 
-# Add "user-invocable: false" to a principle-* leaf so the slash menu does not list it. Upstream's
-# "disable-model-invocation: true" stays, so the leaf is loaded only by path.
-hide_from_slash_menu() {
-    local file="$1" end
-    end="$(frontmatter_end "$file")"
-    [[ -n "$end" ]] || return 0
-    awk -v end="$end" '
-        NR > 1 && NR < end && /^user-invocable:/ { next }
-        NR == end { print "user-invocable: false" }
-        { print }
-    ' "$file" > "$file.tmp"
-    mv "$file.tmp" "$file"
-}
-
 VENDORED=()
 for url in "${SKILLS[@]}"; do
     VENDORED+=("$(basename "$url")")
@@ -153,26 +116,20 @@ add_pointer() {
 
 # User-only skills are hidden from the model's skill list and a skill tool refuses them, so a
 # downloaded skill that names one needs its path. Write skill-paths.md with the user-only
-# downloaded skills this skill names (in **bold**, `code` or `/code`, as <name> or principle-<name>),
-# and point to it from SKILL.md and from every other file that names one of them, since a
-# subagent may be handed a reference file without SKILL.md.
+# downloaded skills this skill names (in **bold**, `code`, `/code` or a ../<name>/SKILL.md link),
+# and point to it from SKILL.md and from every other file that
+# names one of them, since a subagent may be handed a reference file without SKILL.md.
 write_skill_paths() {
     local skill_name="$1" skill_dir="$SKILL_DIR/$1"
-    local token target rows="" count=0 mapped=() names file rel
+    local token rows="" count=0 mapped=() names file rel
     while read -r token; do
-        target=""
-        if is_vendored_user_only "$token"; then
-            target="$token"
-        elif is_vendored_user_only "principle-$token"; then
-            target="principle-$token"
-        fi
-        if [[ -n "$target" && "$target" != "$skill_name" ]]; then
-            rows+="| $token | [../$target/SKILL.md](../$target/SKILL.md) |"$'\n'
+        if is_vendored_user_only "$token" && [[ "$token" != "$skill_name" ]]; then
+            rows+="| $token | [../$token/SKILL.md](../$token/SKILL.md) |"$'\n'
             mapped+=("$token")
             count=$((count + 1))
         fi
-    done < <(grep -rhoE '\*\*[a-z][a-z0-9-]*\*\*|`/?[a-z][a-z0-9-]*`' "$skill_dir" \
-        --include='*.md' --exclude=skill-paths.md | tr -d '*`/' | sort -u)
+    done < <(grep -rhoE '\*\*[a-z][a-z0-9-]*\*\*|`/?[a-z][a-z0-9-]*`|\.\./[a-z][a-z0-9-]*/SKILL\.md' "$skill_dir" \
+        --include='*.md' --exclude=skill-paths.md | sed -E 's#^\.\./([a-z0-9-]+)/SKILL\.md$#\1#' | tr -d '*`/' | sort -u)
     [[ "$count" -eq 0 ]] && return 0
 
     {
@@ -197,11 +154,11 @@ write_skill_paths() {
         else
             add_pointer "$file" "$(echo "$rel" | sed -E 's#[^/]+#..#g')/skill-paths.md"
         fi
-    done < <(grep -rlE "(\*\*|\`/?)($names)(\*\*|\`)" "$skill_dir" --include='*.md' --exclude=skill-paths.md)
+    done < <(grep -rlE "(\*\*|\`/?)($names)(\*\*|\`)|\.\./($names)/SKILL\.md" "$skill_dir" --include='*.md' --exclude=skill-paths.md)
 
     # A name written as "**name** skill" that is not in the catalog points nowhere.
     while read -r token; do
-        if [[ ! -f "$SKILL_DIR/$token/SKILL.md" && ! -f "$SKILL_DIR/principle-$token/SKILL.md" ]]; then
+        if [[ ! -f "$SKILL_DIR/$token/SKILL.md" ]]; then
             echo "Warning: $skill_name: names the $token skill, which is not in the catalog" >&2
         fi
     done < <(grep -rhoE '(\*\*|`)[a-z][a-z0-9-]*(\*\*|`)( principle)? skill' "$skill_dir" \
@@ -236,9 +193,6 @@ for url in "${SKILLS[@]}"; do
         rm -rf "$SKILL_DIR/$skill_name"
         cp -R "$tmp_dir/$path" "$SKILL_DIR/$skill_name"
         echo "Updated: $skill_name"
-        if [[ "$skill_name" == principle-* ]]; then
-            hide_from_slash_menu "$SKILL_DIR/$skill_name/SKILL.md"
-        fi
         if is_user_only "$SKILL_DIR/$skill_name/SKILL.md"; then
             mirror_policy_for_codex "$skill_name" "$SKILL_DIR/$skill_name"
         fi
