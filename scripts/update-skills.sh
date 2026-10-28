@@ -20,6 +20,7 @@ SKILLS=(
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/domain-modeling"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/research"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder"
+    "https://github.com/mattpocock/skills/tree/main/skills/engineering/pr"
 
     # pstack skills
     "https://github.com/cursor/plugins/tree/main/pstack/skills/architect"
