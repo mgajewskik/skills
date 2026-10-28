@@ -56,10 +56,12 @@ class LogTest(unittest.TestCase):
     def file(self, name):
         return Path(self.tmp.name) / name
 
-    def test_new_creates_single_file_and_excludes_it_from_git(self):
+    def test_new_creates_a_log_directory_and_excludes_it_from_git(self):
         log_id = self.new()
         self.assertEqual(log_id, f"{TODAY}-fix-api")
-        self.assertTrue((self.project / ".work" / f"{log_id}.yml").is_file())
+        self.assertEqual(list((self.project / ".work").iterdir()), [self.project / ".work" / log_id])
+        self.assertEqual(list((self.project / ".work" / log_id).iterdir()),
+                         [self.project / ".work" / log_id / "log.yml"])
         self.assertEqual(self.new(), f"{TODAY}-fix-api-2")
         exclude = (self.project / ".git" / "info" / "exclude").read_text().splitlines()
         self.assertEqual(exclude.count("/.work/"), 1)
@@ -115,29 +117,54 @@ class LogTest(unittest.TestCase):
         latin1.write_bytes(b"caf\xe9\nDB_PASSWORD=hunter2hunter2\n")
         self.assertEqual(self.run_log("add", log_id, "note", "--text", "log", "--artifact", str(latin1))[0], 2)
         self.assertEqual(path.read_bytes(), before)
-        self.assertTrue(path.is_file(), "a refused artifact must not promote the log")
+        self.assertEqual(list(path.parent.iterdir()), [path], "a refused artifact must not be saved")
         self.ok("add", log_id, "note", "--text", "timeout_seconds=30 and token_ttl: 3600 and DB_PASSWORD=$DB_PASSWORD")
 
-    def test_first_artifact_moves_log_into_a_directory(self):
+    def test_artifacts_are_named_after_their_entry(self):
         log_id = self.new()
+        self.ok("add", log_id, "note", "--text", "no artifact")
         pods = self.file("pods.csv")
         pods.write_text("name,status\napi-1,Running\n")
         self.ok("add", log_id, "evidence", "--claim", "pods up", "--status", "established",
                 "--command", "kubectl get pods", "--artifact", str(pods))
         folder = self.project / ".work" / log_id
-        self.assertFalse((self.project / ".work" / f"{log_id}.yml").exists())
-        self.assertEqual((folder / "pods.csv").read_text(), "name,status\napi-1,Running\n")
+        self.assertEqual((folder / "002-pods.csv").read_text(), "name,status\napi-1,Running\n")
         self.ok("add", log_id, "note", "--text", "again", "--artifact", str(pods))
-        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["log.yml", "pods-2.csv", "pods.csv"])
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["002-pods.csv", "003-pods.csv", "log.yml"])
         doc = self.doc(log_id)
-        self.assertEqual(doc["artifacts"], ["pods.csv", "pods-2.csv"])
-        self.assertEqual([e["artifact"] for e in doc["timeline"]], ["pods.csv", "pods-2.csv"])
+        self.assertEqual(doc["artifacts"], ["002-pods.csv", "003-pods.csv"])
+        self.assertEqual([e.get("artifact") for e in doc["timeline"]], [None, "002-pods.csv", "003-pods.csv"])
+
+    def test_phases_decisions_and_corrections(self):
+        log_id = self.new()
+        self.ok("add", log_id, "note", "--text", "before any phase")
+        self.assertEqual(self.ok("phase", log_id, "4. Loop one probe at a time"), "2")
+        self.ok("add", log_id, "evidence", "--claim", "upstream times out", "--status", "established",
+                "--command", "curl -m 5 upstream", "--why", "separates timeout from refusal")
+        self.ok("phase", log_id, "6. Conclude")
+        self.assertEqual(self.run_log("add", log_id, "decision", "--text", "raise timeout")[0], 2)
+        self.assertEqual(self.run_log("add", log_id, "decision", "--text", "raise timeout", "--why", "slow",
+                                      "--evidence", "3,9")[0], 2)
+        self.ok("add", log_id, "decision", "--text", "raise the upstream timeout to 30s", "--why",
+                "p99 upstream latency is 12s", "--evidence", "3", "--rejected", "add retries: doubles load")
+        self.assertEqual(self.run_log("add", log_id, "note", "--text", "x", "--supersedes", "9")[0], 2)
+        self.ok("add", log_id, "note", "--text", "p99 was 14s, not 12s", "--supersedes", "5")
+        timeline = self.doc(log_id)["timeline"]
+        self.assertNotIn("phase", timeline[0])
+        self.assertEqual(timeline[1], {"n": 2, "at": timeline[1]["at"], "kind": "phase",
+                                       "name": "4. Loop one probe at a time"})
+        self.assertEqual((timeline[2]["phase"], timeline[2]["why"]),
+                         ("4. Loop one probe at a time", "separates timeout from refusal"))
+        self.assertEqual({k: v for k, v in timeline[4].items() if k != "at"}, {
+            "n": 5, "kind": "decision", "phase": "6. Conclude", "why": "p99 upstream latency is 12s",
+            "text": "raise the upstream timeout to 30s", "rejected": "add retries: doubles load", "evidence": [3]})
+        self.assertEqual((timeline[5]["supersedes"], timeline[5]["phase"]), (5, "6. Conclude"))
 
     def test_revert_plan_lists_unreverted_changes_newest_first(self):
         log_id = self.new()
         reversible = ("add", log_id, "run", "--class", "reversible")
-        self.ok(*reversible, "--purpose", "scale up", "--command", "scale 5", "--revert", "scale 3")
-        self.ok(*reversible, "--purpose", "conns", "--command", "patch 4096", "--revert", "patch\n  1024")
+        self.ok(*reversible, "--why", "scale up", "--command", "scale 5", "--revert", "scale 3")
+        self.ok(*reversible, "--why", "conns", "--command", "patch 4096", "--revert", "patch\n  1024")
         self.ok("add", log_id, "run", "--class", "read-only", "--command", "get cm")
         header = f"# run from {log.project_root()}\n\n"
         scale = "# #1 executed, reversible: scale up\nscale 3"
@@ -158,23 +185,23 @@ class LogTest(unittest.TestCase):
         log_id = self.new()
         manifest = self.file("cm-nginx-before.yaml")
         manifest.write_text("kind: ConfigMap\ndata:\n  worker_connections: '1024'\n")
-        plan = ("add", log_id, "plan", "--by", "user", "--class", "reversible", "--purpose", "raise conns",
+        plan = ("add", log_id, "plan", "--by", "user", "--class", "reversible", "--why", "raise conns",
                 "--command", "kubectl apply -f cm-new.yaml")
         self.assertEqual(self.run_log(*plan)[0], 2)
         self.assertEqual(self.run_log(*plan, "--revert", "kubectl apply -f {artifact}")[0], 2)
         self.ok(*plan, "--revert", "kubectl apply -f {artifact}", "--artifact", str(manifest))
-        self.ok("add", log_id, "run", "--class", "irreversible", "--purpose", "drop cache", "--command",
+        self.ok("add", log_id, "run", "--class", "irreversible", "--why", "drop cache", "--command",
                 "redis-cli FLUSHDB", "--no-revert", "cache contents are not backed up")
-        self.ok("add", log_id, "run", "--class", "irreversible", "--purpose", "delete pvc", "--command",
+        self.ok("add", log_id, "run", "--class", "irreversible", "--why", "delete pvc", "--command",
                 "kubectl delete pvc data", "--revert", "velero restore create --from-backup nightly")
-        saved = f".work/{log_id}/cm-nginx-before.yaml"
+        saved = f".work/{log_id}/001-cm-nginx-before.yaml"
         self.assertEqual((self.project / saved).read_text(), manifest.read_text())
         self.assertEqual(self.doc(log_id)["revert"], [
-            {"of": 3, "state": "executed", "class": "irreversible", "purpose": "delete pvc",
+            {"of": 3, "state": "executed", "class": "irreversible", "why": "delete pvc",
              "command": "velero restore create --from-backup nightly"},
-            {"of": 2, "state": "executed", "class": "irreversible", "purpose": "drop cache",
+            {"of": 2, "state": "executed", "class": "irreversible", "why": "drop cache",
              "no_revert": "cache contents are not backed up"},
-            {"of": 1, "state": "planned for user", "class": "reversible", "purpose": "raise conns",
+            {"of": 1, "state": "planned for user", "class": "reversible", "why": "raise conns",
              "command": f"kubectl apply -f {saved}"}])
         self.assertEqual(self.ok("revert-plan", log_id), (
             f"# run from {log.project_root()}\n\n"
@@ -188,7 +215,7 @@ class LogTest(unittest.TestCase):
         self.assertEqual(self.run_log("add", log_id, "run", "--by", "user", "--from-plan", "2")[0], 2)
         self.assertEqual(self.ok("add", log_id, "run", "--by", "user", "--from-plan", "1"), "4")
         self.assertEqual(self.doc(log_id)["revert"][0], {
-            "of": 4, "state": "executed", "class": "reversible", "purpose": "raise conns",
+            "of": 4, "state": "executed", "class": "reversible", "why": "raise conns",
             "command": f"kubectl apply -f {saved}"})
         self.assertEqual(self.run_log("add", log_id, "run", "--by", "user", "--from-plan", "1")[0], 2)
         self.ok("add", log_id, "run", "--by", "user", "--class", "reversible", "--command",
@@ -197,7 +224,7 @@ class LogTest(unittest.TestCase):
 
     def test_a_user_run_closes_a_read_only_plan(self):
         log_id = self.new()
-        self.ok("add", log_id, "plan", "--by", "user", "--class", "read-only", "--purpose", "pod state",
+        self.ok("add", log_id, "plan", "--by", "user", "--class", "read-only", "--why", "pod state",
                 "--command", "kubectl -n api get pods")
         output = self.file("pods.txt")
         output.write_text("api-1   0/1   CrashLoopBackOff\n")
@@ -206,7 +233,7 @@ class LogTest(unittest.TestCase):
         run = self.doc(log_id)["timeline"][1]
         self.assertEqual({k: run[k] for k in ("kind", "by", "from_plan", "class", "command", "artifact")},
                          {"kind": "run", "by": "user", "from_plan": 1, "class": "read-only",
-                          "command": "kubectl -n api get pods", "artifact": "pods.txt"})
+                          "command": "kubectl -n api get pods", "artifact": "002-pods.txt"})
         self.assertEqual(self.run_log("add", log_id, "run", "--by", "user", "--from-plan", "1")[0], 2)
         self.assertEqual(self.doc(log_id)["revert"], [])
 
@@ -230,16 +257,21 @@ class LogTest(unittest.TestCase):
                                       "--evidence", "9")[0], 2)
         self.ok("root-cause", log_id, "--summary", "worker_connections too low", "--confidence",
                 "leading-hypothesis", "--evidence", "1")
+        self.ok("add", log_id, "note", "--text", "pasted output:\n\n- n: 9\n  kind: run")
         self.ok("close", log_id, "--status", "done", "--summary", "raised the limit")
         text = log.locate(log_id).read_text()
         self.assertIn("  command: |-\n    nginx -T |\n      grep worker_connections\n", text)
+        self.assertIn("\nsummary: raised the limit\n\nroot_cause:\n", text)
+        self.assertIn("\n  - 1\n\nrevert: []\n\ntimeline:\n- n: 1\n", text)
+        self.assertIn("      grep worker_connections\n\n- n: 2\n", text)
         doc = yaml.safe_load(text)
         self.assertEqual(list(doc), ["id", "task", "playbook", "status", "created", "updated", "summary",
                                      "root_cause", "revert", "timeline"])
         self.assertEqual(doc["root_cause"], {"summary": "worker_connections too low",
                                              "confidence": "leading-hypothesis", "evidence": [1]})
         self.assertEqual((doc["status"], doc["summary"]), ("done", "raised the limit"))
-        self.assertEqual(list((self.project / ".work").iterdir()), [log.locate(log_id)])
+        self.assertEqual([e["n"] for e in doc["timeline"]], [1, 2])
+        self.assertEqual(doc["timeline"][1]["text"], "pasted output:\n\n- n: 9\n  kind: run")
 
 
 if __name__ == "__main__":

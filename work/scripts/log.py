@@ -3,18 +3,21 @@
 # requires-python = ">=3.11"
 # dependencies = ["pyyaml>=6"]
 # ///
-"""Work log: one YAML document per task under <project>/.work/, written only by this script.
+"""Work log: one directory per task, <project>/.work/ID/, holding log.yml and its artifacts, written only
+by this script.
 
 new SLUG --task TEXT --playbook NAME   start a log; prints its id (YYYY-MM-DD-SLUG)
-add ID run|plan|evidence|note ...      append a timeline entry; prints its number
+phase ID NAME                          start a playbook step; later entries carry its name
+add ID run|plan|evidence|decision|note ...  append a timeline entry; prints its number
 root-cause ID --summary TEXT --confidence LEVEL [--evidence N,N]
 close ID --status done|halted|reverted --summary TEXT
 check ID [--since N] [--max-age-hours H]  exit 0 only when every claim's latest evidence is established
 revert-plan ID                         newest first, how to undo each change not yet reverted
 
 Every reversible change, run or planned, carries --revert; an irreversible one carries --revert or
---no-revert. The log is .work/ID.yml until the first --artifact, which moves it to .work/ID/log.yml
-with the artifacts beside it. Values and text artifacts that look like secrets are refused.
+--no-revert. An --artifact is copied beside log.yml as NNN-NAME, NNN being its entry's number. A wrong
+entry is corrected by a new one with --supersedes N; the file is never edited. Values and text artifacts
+that look like secrets are refused.
 """
 
 import argparse
@@ -120,11 +123,10 @@ def exclude_from_git(root):
 
 
 def locate(log_id):
-    work = project_root() / WORK_DIR
-    for path in (work / log_id / "log.yml", work / f"{log_id}.yml"):
-        if path.exists():
-            return path
-    raise LogError(f"no log {log_id!r} under {work}")
+    path = project_root() / WORK_DIR / log_id / "log.yml"
+    if not path.exists():
+        raise LogError(f"no log {log_id!r} under {path.parent.parent}")
+    return path
 
 
 def load(path):
@@ -155,7 +157,7 @@ def revert_view(timeline):
         if "reverts" in e or e["n"] in reverted or e["n"] in executed_plans:
             continue
         item = {"of": e["n"], "state": "executed" if e["kind"] == "run" else f"planned for {e['by']}",
-                "class": e["class"], "purpose": e.get("purpose", "")}
+                "class": e["class"], "why": e.get("why", "")}
         if "revert" in e:
             item["command"] = e["revert"]
         else:
@@ -164,35 +166,54 @@ def revert_view(timeline):
     return view
 
 
+def dump(value):
+    return yaml.safe_dump(value, sort_keys=False, allow_unicode=True, width=100)
+
+
+def render(doc):
+    """The log as YAML with a blank line after the header, each section, and each timeline entry. Each part
+    is dumped on its own and joined, so the blank lines never touch a value."""
+    header = {key: doc[key] for key in ("id", "task", "playbook", "status", "created", "updated", "summary")
+              if key in doc}
+    parts = [dump(header)]
+    parts += [dump({key: doc[key]}) for key in ("root_cause", "revert", "artifacts") if key in doc]
+    if doc["timeline"]:
+        parts.append("timeline:\n" + "\n".join(dump([entry]) for entry in doc["timeline"]))
+    else:
+        parts.append(dump({"timeline": []}))
+    return "\n".join(parts)
+
+
 def save(path, doc):
     doc["updated"] = now()
     doc["revert"] = revert_view(doc["timeline"])
-    ordered = {key: doc[key] for key in ("id", "task", "playbook", "status", "created", "updated", "summary",
-                                         "root_cause", "revert", "artifacts", "timeline") if key in doc}
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(yaml.safe_dump(ordered, sort_keys=False, allow_unicode=True, width=100))
+    tmp.write_text(render(doc))
     os.replace(tmp, path)
 
 
-def save_artifact(path, source):
-    """Copy an artifact beside the log, moving ID.yml to ID/log.yml first. Returns (log path, name)."""
+def save_artifact(path, source, n):
+    """Copy an artifact beside the log as NNN-NAME, NNN being the number of the entry it belongs to."""
     source = Path(source)
     if not source.is_file():
         raise LogError(f"artifact {source} is not a file")
     if looks_secret(source.read_text(errors="replace")):
         raise LogError(f"artifact {source} looks like it contains a secret; redact it and try again")
-    if path.name != "log.yml":
-        folder = path.with_suffix("")
-        folder.mkdir(exist_ok=True)
-        new_path = folder / "log.yml"
-        os.replace(path, new_path)
-        path = new_path
-    name, number = source.name, 2
-    while (path.parent / name).exists():
-        name = f"{source.stem}-{number}{source.suffix}"
-        number += 1
+    name = f"{n:03d}-{source.name}"
     shutil.copy2(source, path.parent / name)
-    return path, name
+    return name
+
+
+def entry_numbers(text, timeline):
+    """Parse comma-separated entry numbers, each of which must exist."""
+    try:
+        numbers = [int(n) for n in text.split(",")]
+    except ValueError:
+        raise LogError("entry numbers are comma-separated, such as 3,7") from None
+    unknown = set(numbers) - {e["n"] for e in timeline}
+    if unknown:
+        raise LogError(f"unknown entries: {sorted(unknown)}")
+    return numbers
 
 
 def cmd_new(args):
@@ -202,15 +223,24 @@ def cmd_new(args):
     work = root / WORK_DIR
     base = f"{datetime.date.today().isoformat()}-{args.slug}"
     log_id, number = base, 2
-    while (work / f"{log_id}.yml").exists() or (work / log_id).exists():
+    while (work / log_id).exists():
         log_id = f"{base}-{number}"
         number += 1
-    work.mkdir(exist_ok=True)
-    exclude_from_git(root)
     doc = {"id": log_id, "task": clean("task", args.task), "playbook": clean("playbook", args.playbook),
            "status": "open", "created": now(), "root_cause": None, "timeline": []}
-    save(work / f"{log_id}.yml", doc)
+    (work / log_id).mkdir(parents=True)
+    exclude_from_git(root)
+    save(work / log_id / "log.yml", doc)
     print(log_id)
+
+
+def cmd_phase(args):
+    path = locate(args.id)
+    doc = load(path)
+    doc["timeline"].append({"n": len(doc["timeline"]) + 1, "at": now(), "kind": "phase",
+                            "name": clean("name", args.name)})
+    save(path, doc)
+    print(len(doc["timeline"]))
 
 
 def cmd_add(args):
@@ -218,11 +248,20 @@ def cmd_add(args):
     doc = load(path)
     timeline = doc["timeline"]
     entry = {"n": len(timeline) + 1, "at": now(), "kind": args.kind}
-    for field in ("purpose", "target", "identity", "class", "by", "claim", "status", "revision", "text",
-                  "command", "revert", "no_revert", "result"):
+    phase = next((e["name"] for e in reversed(timeline) if e["kind"] == "phase"), None)
+    if phase:
+        entry["phase"] = phase
+    for field in ("text", "why", "target", "identity", "class", "by", "claim", "status", "revision",
+                  "command", "revert", "no_revert", "result", "rejected"):
         value = getattr(args, field, None)
         if value is not None:
             entry[field] = clean(field.replace("_", "-"), value)
+    if args.evidence is not None:
+        entry["evidence"] = entry_numbers(args.evidence, timeline)
+    if args.supersedes is not None:
+        if args.supersedes not in {e["n"] for e in timeline}:
+            raise LogError(f"entry {args.supersedes} does not exist")
+        entry["supersedes"] = args.supersedes
     if args.from_plan is not None:
         if args.kind != "run":
             raise LogError("--from-plan goes on the run that executed the plan")
@@ -230,12 +269,13 @@ def cmd_add(args):
         settled = {e.get("from_plan") for e in timeline} | {e.get("reverts") for e in timeline}
         if plan is None or args.from_plan in settled:
             raise LogError(f"entry {args.from_plan} is not a plan still waiting to run")
-        for field in ("purpose", "target", "identity", "class", "command", "revert", "no_revert"):
+        for field in ("why", "target", "identity", "class", "command", "revert", "no_revert"):
             if field in plan:
                 entry.setdefault(field, plan[field])
         entry["from_plan"] = args.from_plan
     required = {"run": ("command", "class"), "plan": ("command", "class", "by"),
-                "evidence": ("claim", "status", "command"), "note": ("text",)}[args.kind]
+                "evidence": ("claim", "status", "command"), "decision": ("text", "why"),
+                "note": ("text",)}[args.kind]
     missing = [f"--{f}" for f in required if f not in entry]
     if missing:
         raise LogError(f"{args.kind} needs {', '.join(missing)}")
@@ -253,7 +293,7 @@ def cmd_add(args):
     if uses_artifact and not args.artifact:
         raise LogError(f"{ARTIFACT_PLACEHOLDER} needs --artifact")
     if args.artifact:
-        path, name = save_artifact(path, args.artifact)
+        name = save_artifact(path, args.artifact, entry["n"])
         entry["artifact"] = name
         doc.setdefault("artifacts", []).append(name)
         relative = os.path.relpath(path.parent / name, project_root())
@@ -268,13 +308,7 @@ def cmd_add(args):
 def cmd_root_cause(args):
     path = locate(args.id)
     doc = load(path)
-    known = {e["n"] for e in doc["timeline"]}
-    try:
-        evidence = [int(n) for n in args.evidence.split(",")] if args.evidence else []
-    except ValueError:
-        raise LogError("--evidence takes comma-separated entry numbers, such as 3,7") from None
-    if not set(evidence) <= known:
-        raise LogError(f"unknown entries in --evidence: {sorted(set(evidence) - known)}")
+    evidence = entry_numbers(args.evidence, doc["timeline"]) if args.evidence else []
     doc["root_cause"] = {"summary": clean("summary", args.summary), "confidence": args.confidence,
                          "evidence": evidence}
     save(path, doc)
@@ -327,7 +361,7 @@ def cmd_revert_plan(args):
 
 
 def print_revert(item, live):
-    print(f"# #{item['of']} {item['state']}, {item['class']}: {item['purpose']}")
+    print(f"# #{item['of']} {item['state']}, {item['class']}: {item['why']}")
     if "no_revert" in item:
         print(f"# cannot be reverted: {item['no_revert']}\n")
     elif live:
@@ -345,11 +379,15 @@ def parser():
     new.add_argument("--task", required=True)
     new.add_argument("--playbook", required=True)
 
+    phase = sub.add_parser("phase", help="start a playbook step")
+    phase.add_argument("id")
+    phase.add_argument("name", help="the step's number and name, such as '3. Classify each difference'")
+
     add = sub.add_parser("add", help="append a timeline entry")
     add.add_argument("id")
-    add.add_argument("kind", choices=("run", "plan", "evidence", "note"))
+    add.add_argument("kind", choices=("run", "plan", "evidence", "decision", "note"))
     add.add_argument("--command", help="the exact command (run, plan) or the one that collected the evidence")
-    add.add_argument("--purpose")
+    add.add_argument("--why", help="why this was done or chosen; required on a decision")
     add.add_argument("--target", help="resolved target: account, context, host, resource")
     add.add_argument("--identity", help="the identity the command runs as")
     add.add_argument("--class", choices=CLASSES, help="run and plan: read-only, reversible, or irreversible")
@@ -364,8 +402,12 @@ def parser():
     add.add_argument("--status", choices=EVIDENCE_STATUSES)
     add.add_argument("--revision", help="evidence: the running revision it is bound to")
     add.add_argument("--result", help="short output, exit code, or observed value")
-    add.add_argument("--text", help="note: a decision, finding, hypothesis, or observation")
-    add.add_argument("--artifact", help="a file to save beside the log")
+    add.add_argument("--text", help="decision: what was chosen; note: a criterion, hypothesis, option, or "
+                                    "resume note")
+    add.add_argument("--evidence", metavar="N,N", help="decision: the entries it rests on")
+    add.add_argument("--rejected", help="decision: the alternatives not chosen and why")
+    add.add_argument("--supersedes", type=int, metavar="N", help="this entry corrects entry N")
+    add.add_argument("--artifact", help="a file to save beside the log as NNN-NAME")
 
     cause = sub.add_parser("root-cause", help="set the root cause")
     cause.add_argument("id")
@@ -390,7 +432,7 @@ def parser():
 
 def main(argv=None):
     args = parser().parse_args(argv)
-    handlers = {"new": cmd_new, "add": cmd_add, "root-cause": cmd_root_cause, "close": cmd_close,
+    handlers = {"new": cmd_new, "phase": cmd_phase, "add": cmd_add, "root-cause": cmd_root_cause, "close": cmd_close,
                 "check": cmd_check, "revert-plan": cmd_revert_plan}
     try:
         return handlers[args.action](args) or 0

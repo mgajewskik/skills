@@ -43,18 +43,21 @@ Live systems and infrastructure source (IaC, manifests, roles, unit files, pipel
 
 ## Work log
 
-Every task keeps one log, continued across the playbooks it chains through, the record the user reads later to see what happened, revert it, or debug it alone. Write it only through `uv run <this skill's directory>/scripts/log.py`, run from inside the project (`--help` lists every field); it lands in the project's `.work/`, excluded from git. Playbook steps say "log" for these calls:
+Every task keeps one log, continued across the playbooks it chains through. It is the audit record the user reads weeks or months later, without running a command, to see what changed, why, on what evidence, how it was verified, and how to undo it; whatever the environment will lose by then must be in it. Write it only through `uv run <this skill's directory>/scripts/log.py`, run from inside the project (`--help` lists every field); each log is a directory `.work/<id>/` holding `log.yml` and its artifacts, excluded from git. Playbook steps say "log" for these calls:
 
 - **Start** at the playbook's first step: `new <kebab-slug> --task "<one sentence>" --playbook <name>`. It prints the log id.
-- **Run** for every command you execute: `add <id> run --class read-only|reversible|irreversible --command ... --target ... --identity ... --result ...`, logged before you execute a change. A revert you execute carries `--reverts <n>`. Commands that use `{artifact}` run from the project root.
-- **Plan** for a command handed to the user or proposed for later: `add <id> plan --by user|agent --class ... --command ...`. When a plan is executed, by you or by the user's report, log `add <id> run --by user|agent --from-plan <n>`; a revert the user ran is `run --by user --class ... --command ... --reverts <n>`.
+- **Phase** at each playbook step: `phase <id> "<step number and name>"`. Later entries carry it.
+- **Run** for every command you execute: `add <id> run --class read-only|reversible|irreversible --command ... --target ... --identity ... --why ... --result ...`, logged before you execute a change. A revert you execute carries `--reverts <n>`. Commands that use `{artifact}` run from the project root.
+- **Plan** for a command handed to the user or proposed for later: `add <id> plan --by user|agent --class ... --command ... --why ...`. When a plan is executed, by you or by the user's report, log `add <id> run --by user|agent --from-plan <n>`; a revert the user ran is `run --by user --class ... --command ... --reverts <n>`.
 - **Revert** on every change, run or plan, so the user can undo it alone: `--revert` with the exact command; an irreversible change gives its best-known recovery or `--no-revert "<reason>"`. When the revert needs a manifest or prior state, save it to a file, pass `--artifact <file>`, and write `{artifact}` in `--revert` where its path goes (`kubectl apply -f {artifact}`).
 - **Evidence** for each claim and the command that observed it: `add <id> evidence --claim ... --status established|failed|unverified --command ...`.
-- **Note** for decisions, criteria, hypotheses, options, and resume notes: `add <id> note --text ...`.
-- **Artifact** for snapshots, previews, inventories, and preserved signals: write the file under `/tmp`, then pass `--artifact <file>` on the entry it belongs to.
-- **Root cause**, gate, revert, close: `root-cause <id> ...`, `check <id> ...`, `revert-plan <id>` (prints only; each revert still follows the playbook's authority rule), and `close <id> --status done|halted|reverted --summary ...` at the end.
+- **Decision** for each choice that shaped the work (a fork, a pivot, an abandoned approach): `add <id> decision --text "<what was chosen>" --why ... --evidence <n,n> --rejected "<alternatives and why not>"`.
+- **Note** for criteria, hypotheses, options, and resume notes: `add <id> note --text ...`.
+- **Artifact** for anything the reader needs that the environment will lose: output that informed a decision or verified a claim (unless it fits verbatim in `--result`), snapshots, previews, manifests, inventories, scraped logs. Write the file under `/tmp`, then pass `--artifact <file>` on the entry it belongs to; it is saved as `<entry number>-<name>`.
+- **Correct** a wrong entry with a new one carrying `--supersedes <n>`; never edit the log by hand.
+- **Root cause**, gate, revert, close: `root-cause <id> ...`, `check <id> ...`, `revert-plan <id>` (prints only; each revert still follows the playbook's authority rule), and `close <id> --status done|halted|reverted --summary ...` at the end. Before closing, walk the timeline against what you actually did: log any missing decision, pivot, or abandoned approach, and supersede any entry that is wrong.
 
-A refused value looks like a secret: redact it and log again. Name the log path in the reply.
+Write entries the way you would tell a teammate what you did: plain words and concrete actions. A refused value looks like a secret: redact it and log again. Name the log path in the reply.
 
 ## Principles
 
