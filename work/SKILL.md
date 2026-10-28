@@ -20,6 +20,13 @@ hooks:
 
 The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
 
+**No comments.** Code you write, and every delegate diff you accept, carries no comments. Make the code say it instead: a precise name, an extracted function, a type, a test. A surprise in our own code that this change can make obvious gets reshaped, not explained. Write a comment only in two cases:
+
+- The user asked for that comment.
+- The code is deliberately unusual and a future reader would otherwise "fix" it: a vendor or platform bug, a protocol quirk, an external constraint, or a workaround whose root fix is out of scope. The comment says why it is this way, what breaks if it changes, and when it can change (an issue, a version, a condition).
+
+`# Load config` or `// increment the retry counter` gets deleted. `# The billing API returns 200 with an error body (issue #123); keep the body check until v3.` stays. Tool directives (shebangs, lint or type suppressions, build tags), license headers, and doc comments the repo's tooling requires are code, not comments. Existing comments outside your change stay; one your change makes false is fixed or deleted. Every review brief (PASS-gate or Independent review) lists "no comment outside these two cases" as an anti-criterion.
+
 ## Playbooks
 
 Match the task to a playbook, open its file, and copy its steps into the todolist verbatim before any task-specific todos. A step you skip stays in the list with `skip: <reason>`. When a task spans several playbooks, name the current one and its exit evidence before moving on.

@@ -34,7 +34,6 @@ SKILLS=(
     "https://github.com/cursor/plugins/tree/main/pstack/skills/how"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/maintain-formal-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/maintain-verification-skill"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/no-comments"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/recall"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/reflect"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/sharpen"
