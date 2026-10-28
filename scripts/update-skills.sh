@@ -38,7 +38,6 @@ SKILLS=(
     "https://github.com/cursor/plugins/tree/main/pstack/skills/recall"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/reflect"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/sharpen"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/show-me-your-work"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/tdd"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/teach"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/technical-writing"
