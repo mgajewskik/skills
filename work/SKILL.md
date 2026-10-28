@@ -36,6 +36,7 @@ Code is everything kept in version-controlled files: application code, tests, sc
 **Code**
 
 - **Implement.** Build or change code and verify it offline. [`implement.md`](playbooks/implement.md).
+- **Fix.** A defect in code: make it red with a check, fix the root cause, keep the check as a regression guard. [`fix.md`](playbooks/fix.md).
 - **Reduce.** Make code smaller and simpler while keeping current behavior or reaching a target behavior the user states: cleanup, deleting what is no longer needed, cutting complexity. [`reduce.md`](playbooks/reduce.md).
 
 **Ops**
@@ -51,6 +52,7 @@ Code is everything kept in version-controlled files: application code, tests, sc
 **Mode**
 
 - **Guided.** The user runs every command and makes every change; you guide from their pasted output. Wraps the matched playbook. Use when the user asks to be guided or walked through, or says not to execute. [`guided.md`](playbooks/guided.md).
+- **TDD.** Build test-first in vertical slices at agreed seams. Wraps Implement. Use only when the user asks for TDD, test-first, or red-green. [`tdd.md`](playbooks/tdd.md).
 
 ## Work log
 
