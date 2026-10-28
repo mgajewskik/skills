@@ -1,6 +1,6 @@
 ---
 name: work
-description: Work discipline for any task that changes or investigates code, config, or infrastructure. Use when the user asks you to do work (build, fix, change, debug, review, deploy, investigate), or when work lands in front of you mid-task or in a delegated brief. Casual questions do not need it.
+description: Work discipline for any task that changes or investigates code, config, or infrastructure. Use when the user asks you to do work (build, fix, change, clean up, debug, review, deploy, investigate), or when work lands in front of you mid-task or in a delegated brief. Casual questions do not need it.
 hooks:
   UserPromptSubmit:
     - hooks:
@@ -31,12 +31,16 @@ The Principles section below grounds every trigger. In your reply, name each pri
 
 Match the task to a playbook, open its file, and copy its steps into the todolist verbatim before any task-specific todos. A step you skip stays in the list with `skip: <reason>`. When a task spans several playbooks, name the current one and its exit evidence before moving on.
 
-Live systems and infrastructure source (IaC, manifests, roles, unit files, pipelines) go to these playbooks. A question about a live system's current behavior is Debug. A mixed task ("fix the Terraform module and roll it out") starts where the failure is observed and hands over at the boundary, naming the exit evidence.
+Code is everything kept in version-controlled files: application code, tests, scripts, config, and infrastructure as code (manifests, roles, unit files, pipelines). Code playbooks work locally and offline: nothing is applied, initialized against a real backend, installed, or deployed; a code change reaches a live system only through Deploy. Ops are operations run against live systems by executing commands. A question about a live system's current behavior is Debug. A mixed task ("fix the Terraform module and roll it out") starts where the failure is observed and hands over at the boundary, naming the exit evidence.
 
-**Infra** (`playbooks/`)
+**Code**
+
+- **Implement.** Build or change code and verify it offline. [`implement.md`](playbooks/implement.md).
+- **Reduce.** Make code smaller and simpler while keeping current behavior or reaching a target behavior the user states: cleanup, deleting what is no longer needed, cutting complexity. [`reduce.md`](playbooks/reduce.md).
+
+**Ops**
 
 - **Debug.** Find the cause of a failure, regression, or unexpected behavior with read-only evidence. [`debug.md`](playbooks/debug.md).
-- **Change.** Edit infrastructure source locally and verify it offline. [`change.md`](playbooks/change.md).
 - **Deploy.** Roll out a reviewed artifact unit by unit, executed or handed over, verified and gated. [`deploy.md`](playbooks/deploy.md).
 - **Live modify.** A direct change to a running system outside the normal rollout path. [`live-modify.md`](playbooks/live-modify.md).
 - **Teardown.** Remove resources, data, or whole environments. [`teardown.md`](playbooks/teardown.md).
@@ -112,10 +116,10 @@ Each principle names when it applies. When one fires, read its `SKILL.md` in ful
 
 **Infrastructure**
 
-- **Act Through the Narrowest Identity** ([`principles/infra-act-through-the-narrowest-identity`](principles/infra-act-through-the-narrowest-identity/SKILL.md)). Before the first live command, and again before any apply, destroy, or bulk change. Name the identity and resolved target from the tool itself, act with least privilege, lean on platform guards.
-- **Bound Change Exposure** ([`principles/infra-bound-change-exposure`](principles/infra-bound-change-exposure/SKILL.md)). Rolling out a change, pushing config or a flag, running a bulk change, or re-running a step that timed out. Representative unit first, stop signals set in advance, widen only after it bakes; a timeout is an unknown outcome, not a failure.
-- **Design Recovery First** ([`principles/infra-design-recovery-first`](principles/infra-design-recovery-first/SKILL.md)). A change touching availability, storage, data, access, or external side effects. Name what recovery restores, what it cannot, and the evidence it works; never cut off your own way back.
-- **Inventory Before Destroy** ([`principles/infra-inventory-before-destroy`](principles/infra-inventory-before-destroy/SKILL.md)). Any delete, destroy, decommission, prune, or cleanup of a live resource. Resolve selectors to a counted list of exact identifiers, then a reversible stage before the irreversible one.
-- **Leave No Residue** ([`principles/infra-leave-no-residue`](principles/infra-leave-no-residue/SKILL.md)). Before a diagnostic that can write, and before closing any repair, rollout, or incident. Preserve what the probe could destroy; remove or name everything the work left behind.
-- **Preserve Compatible Transitions** ([`principles/infra-preserve-compatible-transitions`](principles/infra-preserve-compatible-transitions/SKILL.md)). Protocol, schema, serialization, or config changes across mixed versions or persisted data. Expand, migrate, then contract; every stage keeps a version you can roll back to.
-- **Verify the Negative Space** ([`principles/infra-verify-the-negative-space`](principles/infra-verify-the-negative-space/SKILL.md)). Accepting any live change, rollout, or destruction. Diff a bounded neighbour set before and after; only the approved targets may differ, and the change must survive the owner's next reconcile.
+- **Act Through the Narrowest Identity** ([`principles/act-through-the-narrowest-identity`](principles/act-through-the-narrowest-identity/SKILL.md)). Before the first live command, and again before any apply, destroy, or bulk change. Name the identity and resolved target from the tool itself, act with least privilege, lean on platform guards.
+- **Bound Change Exposure** ([`principles/bound-change-exposure`](principles/bound-change-exposure/SKILL.md)). Rolling out a change, pushing config or a flag, running a bulk change, or re-running a step that timed out. Representative unit first, stop signals set in advance, widen only after it bakes; a timeout is an unknown outcome, not a failure.
+- **Design Recovery First** ([`principles/design-recovery-first`](principles/design-recovery-first/SKILL.md)). A change touching availability, storage, data, access, or external side effects. Name what recovery restores, what it cannot, and the evidence it works; never cut off your own way back.
+- **Inventory Before Destroy** ([`principles/inventory-before-destroy`](principles/inventory-before-destroy/SKILL.md)). Any delete, destroy, decommission, prune, or cleanup of a live resource. Resolve selectors to a counted list of exact identifiers, then a reversible stage before the irreversible one.
+- **Leave No Residue** ([`principles/leave-no-residue`](principles/leave-no-residue/SKILL.md)). Before a diagnostic that can write, and before closing any repair, rollout, or incident. Preserve what the probe could destroy; remove or name everything the work left behind.
+- **Preserve Compatible Transitions** ([`principles/preserve-compatible-transitions`](principles/preserve-compatible-transitions/SKILL.md)). Protocol, schema, serialization, or config changes across mixed versions or persisted data. Expand, migrate, then contract; every stage keeps a version you can roll back to.
+- **Verify the Negative Space** ([`principles/verify-the-negative-space`](principles/verify-the-negative-space/SKILL.md)). Accepting any live change, rollout, or destruction. Diff a bounded neighbour set before and after; only the approved targets may differ, and the change must survive the owner's next reconcile.

@@ -1,5 +1,5 @@
 ---
-name: infra-verify-the-negative-space
+name: verify-the-negative-space
 description: "Apply when accepting any live change, rollout, or destruction. Diff a bounded neighbour set before and after, and check the change survives the owner's next reconcile."
 disable-model-invocation: true
 ---

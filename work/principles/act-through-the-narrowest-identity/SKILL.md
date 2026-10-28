@@ -1,5 +1,5 @@
 ---
-name: infra-act-through-the-narrowest-identity
+name: act-through-the-narrowest-identity
 description: "Apply before the first live command of a task, and again right before any apply, destroy, or bulk change. Name the identity and resolved target, act with least privilege, lean on platform guards."
 disable-model-invocation: true
 ---

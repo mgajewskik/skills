@@ -1,5 +1,5 @@
 ---
-name: infra-preserve-compatible-transitions
+name: preserve-compatible-transitions
 description: "Apply to protocol, endpoint, schema, serialization, or config changes that live through mixed versions or persisted data. Expand, migrate, then contract, readers before writers; every stage keeps a version you can roll back to."
 disable-model-invocation: true
 ---

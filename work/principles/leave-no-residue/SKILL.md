@@ -1,5 +1,5 @@
 ---
-name: infra-leave-no-residue
+name: leave-no-residue
 description: "Apply before a diagnostic that opens, mounts, starts, or repairs something, and before closing any diagnosis, repair, rollout, or incident. Preserve what the probe could destroy; remove or name everything the work left behind."
 disable-model-invocation: true
 ---

@@ -1,5 +1,5 @@
 ---
-name: infra-design-recovery-first
+name: design-recovery-first
 description: "Apply before a change that touches availability, storage, data, access, or external side effects. Name what recovery restores, what it cannot, and the evidence it works."
 disable-model-invocation: true
 ---
