@@ -27,7 +27,6 @@ SKILLS=(
     "https://github.com/cursor/plugins/tree/main/pstack/skills/benchmark-checklist"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/blast-radius"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/bro"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/correct"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/create-formal-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/create-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/figure-it-out"
