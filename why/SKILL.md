@@ -4,8 +4,6 @@ description: "Use for 'why does X work this way', 'why we picked Y', design rati
 disable-model-invocation: true
 ---
 
-Skills named in this skill are user-only. Load them by reading the paths in [skill-paths.md](skill-paths.md), never through a skill tool, and give a subagent the path of any skill it needs.
-
 # Why
 
 Investigate the motivation and intent behind code. The companion `how` skill answers what the code does and how it works. `why` answers what forces led to its shape.

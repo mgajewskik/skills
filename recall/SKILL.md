@@ -4,8 +4,6 @@ description: "Reconstruct your recent working context from your own chat history
 disable-model-invocation: true
 ---
 
-Skills named in this skill are user-only. Load them by reading the paths in [skill-paths.md](skill-paths.md), never through a skill tool, and give a subagent the path of any skill it needs.
-
 # Recall
 
 **Before you start or resume work, you rebuild the user's recent working context and hand back a tight capsule of where things stand now and what to do next.**

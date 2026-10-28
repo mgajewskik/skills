@@ -4,8 +4,6 @@ description: "Find what a change could break somewhere else before it ships, bey
 disable-model-invocation: true
 ---
 
-Skills named in this skill are user-only. Load them by reading the paths in [skill-paths.md](skill-paths.md), never through a skill tool, and give a subagent the path of any skill it needs.
-
 # Blast radius
 
 Find what a change breaks somewhere else, before it ships. Use for "blast radius of X", "what could this break", or reviewing a small diff you don't trust yet.

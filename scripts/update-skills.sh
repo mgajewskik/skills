@@ -7,45 +7,38 @@ SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Every skill keeps its upstream invocation setting. A user-only skill (frontmatter
 # "disable-model-invocation: true") never enters the model's skill list; the user names it,
-# or the agent reads its SKILL.md by path. A downloaded skill that names other user-only
-# skills gets a generated skill-paths.md with those paths (see write_skill_paths).
+# or the agent reads its SKILL.md by path.
 SKILLS=(
     # Softaworks skills
     "https://github.com/softaworks/agent-toolkit/tree/main/skills/crafting-effective-readmes"
-    "https://github.com/softaworks/agent-toolkit/tree/main/skills/reducing-entropy"
-    "https://github.com/softaworks/agent-toolkit/tree/main/skills/skill-judge"
 
     # Third-party skills
     "https://github.com/antonbabenko/terraform-skill/tree/master/skills/terraform-skill"
 
     # Matt Pocock's skills
     "https://github.com/mattpocock/skills/tree/main/skills/productivity/writing-for-agents"
-    "https://github.com/mattpocock/skills/tree/main/skills/productivity/grill-me"
-    "https://github.com/mattpocock/skills/tree/main/skills/productivity/grilling"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/domain-modeling"
-    "https://github.com/mattpocock/skills/tree/main/skills/engineering/grill-with-docs"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/research"
     "https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder"
-    "https://github.com/mattpocock/skills/tree/main/skills/productivity/to-questionnaire"
 
-    # pstack skills (all except poteto-mode, setup-pstack, make-bot-ui, automate-me). The principle-*
-    # skills are vendored into work/principles/ by work/scripts/update.sh.
+    # pstack skills
     "https://github.com/cursor/plugins/tree/main/pstack/skills/architect"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/arena"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/benchmark-checklist"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/blast-radius"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/bro"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/correct"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/create-formal-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/create-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/figure-it-out"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/how"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/interrogate"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/maintain-formal-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/maintain-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/no-comments"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/recall"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/reflect"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/sharpen"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/show-me-your-work"
-    "https://github.com/cursor/plugins/tree/main/pstack/skills/swarm"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/tdd"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/teach"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/technical-writing"
@@ -86,83 +79,15 @@ for url in "${SKILLS[@]}"; do
     VENDORED+=("$(basename "$url")")
 done
 
-# True when $1 is a downloaded skill that is user-only.
-is_vendored_user_only() {
-    local name="$1" vendored
-    for vendored in "${VENDORED[@]}"; do
-        if [[ "$vendored" == "$name" && -f "$SKILL_DIR/$name/SKILL.md" ]]; then
-            is_user_only "$SKILL_DIR/$name/SKILL.md"
-            return
-        fi
-    done
-    return 1
-}
-
-POINTER_START="Skills named in this skill are user-only."
-
-# Add the skill-paths.md pointer to $1 (below its frontmatter, if any) unless it is there.
-# $2 is the relative path from $1's directory to skill-paths.md.
-add_pointer() {
-    local file="$1" link="$2" end
-    grep -qF "$POINTER_START" "$file" && return 0
-    end="$(frontmatter_end "$file")"
-    awk -v end="${end:-0}" -v pointer="$POINTER_START Load them by reading the paths in [skill-paths.md]($link), never through a skill tool, and give a subagent the path of any skill it needs." '
-        end == 0 && NR == 1 { print pointer; print "" }
-        { print }
-        NR == end { print ""; print pointer }
-    ' "$file" > "$file.tmp"
-    mv "$file.tmp" "$file"
-}
-
-# User-only skills are hidden from the model's skill list and a skill tool refuses them, so a
-# downloaded skill that names one needs its path. Write skill-paths.md with the user-only
-# downloaded skills this skill names (in **bold**, `code`, `/code` or a ../<name>/SKILL.md link),
-# and point to it from SKILL.md and from every other file that
-# names one of them, since a subagent may be handed a reference file without SKILL.md.
-write_skill_paths() {
-    local skill_name="$1" skill_dir="$SKILL_DIR/$1"
-    local token rows="" count=0 mapped=() names file rel
+# A name written as "**name** skill" points nowhere unless it is a catalog skill or a work principle.
+warn_unresolved_skills() {
+    local skill_name="$1" token
     while read -r token; do
-        if is_vendored_user_only "$token" && [[ "$token" != "$skill_name" ]]; then
-            rows+="| $token | [../$token/SKILL.md](../$token/SKILL.md) |"$'\n'
-            mapped+=("$token")
-            count=$((count + 1))
-        fi
-    done < <(grep -rhoE '\*\*[a-z][a-z0-9-]*\*\*|`/?[a-z][a-z0-9-]*`|\.\./[a-z][a-z0-9-]*/SKILL\.md' "$skill_dir" \
-        --include='*.md' --exclude=skill-paths.md | sed -E 's#^\.\./([a-z0-9-]+)/SKILL\.md$#\1#' | tr -d '*`/' | sort -u)
-    [[ "$count" -eq 0 ]] && return 0
-
-    {
-        echo "# Skill paths"
-        echo
-        echo "Written by scripts/update-skills.sh on every update. Edit the script, not this file."
-        echo
-        echo "This skill names the skills below. They are user-only: they are not in your skill list, and a skill tool refuses them. Load each one by reading its SKILL.md at the path given, relative to this file's directory. When a subagent needs one, put the absolute path in its brief and tell it to read the file."
-        echo
-        echo "| Named as | Path |"
-        echo "| --- | --- |"
-        printf '%s' "$rows"
-    } > "$skill_dir/skill-paths.md"
-    echo "Skill paths: $skill_name: wrote skill-paths.md ($count skills)"
-
-    add_pointer "$skill_dir/SKILL.md" "skill-paths.md"
-    names="$(IFS='|'; echo "${mapped[*]}")"
-    while read -r file; do
-        rel="$(dirname "${file#"$skill_dir"/}")"
-        if [[ "$rel" == "." ]]; then
-            add_pointer "$file" "skill-paths.md"
-        else
-            add_pointer "$file" "$(echo "$rel" | sed -E 's#[^/]+#..#g')/skill-paths.md"
-        fi
-    done < <(grep -rlE "(\*\*|\`/?)($names)(\*\*|\`)|\.\./($names)/SKILL\.md" "$skill_dir" --include='*.md' --exclude=skill-paths.md)
-
-    # A name written as "**name** skill" that is not in the catalog points nowhere.
-    while read -r token; do
-        if [[ ! -f "$SKILL_DIR/$token/SKILL.md" ]]; then
+        if [[ ! -f "$SKILL_DIR/$token/SKILL.md" && ! -f "$SKILL_DIR/work/principles/${token#principle-}/SKILL.md" ]]; then
             echo "Warning: $skill_name: names the $token skill, which is not in the catalog" >&2
         fi
-    done < <(grep -rhoE '(\*\*|`)[a-z][a-z0-9-]*(\*\*|`)( principle)? skill' "$skill_dir" \
-        --include='*.md' --exclude=skill-paths.md | sed -E 's/^[*`]+([a-z0-9-]+).*/\1/' | sort -u)
+    done < <(grep -rhoE '(\*\*|`)[a-z][a-z0-9-]*(\*\*|`)( principle)? skill' "$SKILL_DIR/$skill_name" \
+        --include='*.md' | sed -E 's/^[*`]+([a-z0-9-]+).*/\1/' | sort -u)
 }
 
 mkdir -p "$SKILL_DIR"
@@ -203,10 +128,9 @@ for url in "${SKILLS[@]}"; do
     rm -rf "$tmp_dir"
 done
 
-# After all downloads, so every named skill's user-only flag is known.
 for skill_name in "${VENDORED[@]}"; do
     if [[ -f "$SKILL_DIR/$skill_name/SKILL.md" ]]; then
-        write_skill_paths "$skill_name"
+        warn_unresolved_skills "$skill_name"
     fi
 done
 

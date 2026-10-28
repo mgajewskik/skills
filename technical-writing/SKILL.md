@@ -4,8 +4,6 @@ description: "Layered technical-writing standard: Diátaxis structure, Google de
 disable-model-invocation: true
 ---
 
-Skills named in this skill are user-only. Load them by reading the paths in [skill-paths.md](skill-paths.md), never through a skill tool, and give a subagent the path of any skill it needs.
-
 # Technical writing
 
 Write so a tired engineer understands on the first read. Apply all four layers.
