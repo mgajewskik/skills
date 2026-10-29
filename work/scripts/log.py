@@ -6,7 +6,9 @@
 """Work log: one directory per task, <project>/.work/ID/, holding log.yml and its artifacts, written only
 by this script.
 
-new SLUG --task TEXT --playbook NAME   start a log; prints its id (YYYY-MM-DD-SLUG)
+new SLUG --task TEXT --playbook NAME [--parent ID]
+                                       start a log; prints its id (YYYY-MM-DD-SLUG, or ID/YYYY-MM-DD-SLUG
+                                       nested inside log ID's directory)
 phase ID NAME                          start a playbook step; later entries carry its name
 add ID run|plan|evidence|decision|note ...  append a timeline entry; prints its number
 root-cause ID --summary TEXT --confidence LEVEL [--evidence N,N]
@@ -173,7 +175,7 @@ def dump(value):
 def render(doc):
     """The log as YAML with a blank line after the header, each section, and each timeline entry. Each part
     is dumped on its own and joined, so the blank lines never touch a value."""
-    header = {key: doc[key] for key in ("id", "task", "playbook", "status", "created", "updated", "summary")
+    header = {key: doc[key] for key in ("id", "task", "playbook", "parent", "status", "created", "updated", "summary")
               if key in doc}
     parts = [dump(header)]
     parts += [dump({key: doc[key]}) for key in ("root_cause", "revert", "artifacts") if key in doc]
@@ -222,12 +224,17 @@ def cmd_new(args):
     root = project_root()
     work = root / WORK_DIR
     base = f"{datetime.date.today().isoformat()}-{args.slug}"
+    if args.parent:
+        locate(args.parent)
+        base = f"{args.parent}/{base}"
     log_id, number = base, 2
     while (work / log_id).exists():
         log_id = f"{base}-{number}"
         number += 1
     doc = {"id": log_id, "task": clean("task", args.task), "playbook": clean("playbook", args.playbook),
            "status": "open", "created": now(), "root_cause": None, "timeline": []}
+    if args.parent:
+        doc["parent"] = args.parent
     (work / log_id).mkdir(parents=True)
     exclude_from_git(root)
     save(work / log_id / "log.yml", doc)
@@ -378,6 +385,8 @@ def parser():
     new.add_argument("slug")
     new.add_argument("--task", required=True)
     new.add_argument("--playbook", required=True)
+    new.add_argument("--parent", metavar="ID", help="nest this log inside log ID's directory, as a delegate's log "
+                                                    "inside its orchestrator's")
 
     phase = sub.add_parser("phase", help="start a playbook step")
     phase.add_argument("id")

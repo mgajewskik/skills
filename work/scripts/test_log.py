@@ -69,6 +69,20 @@ class LogTest(unittest.TestCase):
         self.assertEqual(status, "")
         self.assertEqual(self.run_log("new", "Bad_Slug", "--task", "x", "--playbook", "debug")[0], 2)
 
+    def test_new_with_parent_nests_the_log_inside_the_parent_log_directory(self):
+        parent = self.ok("new", "ship-api", "--task", "ship the api", "--playbook", "auto")
+        child = self.ok("new", "fix-api", "--task", "fix the 502", "--playbook", "fix", "--parent", parent)
+        self.assertEqual(child, f"{TODAY}-ship-api/{TODAY}-fix-api")
+        self.assertEqual(list((self.project / ".work").iterdir()), [self.project / ".work" / f"{TODAY}-ship-api"])
+        self.assertTrue((self.project / ".work" / f"{TODAY}-ship-api" / f"{TODAY}-fix-api" / "log.yml").is_file())
+        self.assertEqual(self.doc(child)["parent"], f"{TODAY}-ship-api")
+        self.assertEqual(self.ok("new", "fix-api", "--task", "fix it again", "--playbook", "fix", "--parent", parent),
+                         f"{TODAY}-ship-api/{TODAY}-fix-api-2")
+        self.assertEqual(self.ok("add", child, "note", "--text", "child entry"), "1")
+        self.assertEqual(self.doc(parent)["timeline"], [])
+        self.assertNotIn("parent", self.doc(parent))
+        self.assertEqual(self.run_log("new", "fix-api", "--task", "x", "--playbook", "fix", "--parent", "no-such-log")[0], 2)
+
     def test_run_entries_resolve_project_from_subdirectory(self):
         log_id = self.new()
         os.chdir(self.project / "sub")

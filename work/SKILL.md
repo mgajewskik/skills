@@ -5,13 +5,13 @@ hooks:
   UserPromptSubmit:
     - hooks:
         - type: command
-          command: "echo 'work is on for this session. When this prompt asks for work, follow the work skill. If its content is no longer in your context, load the work skill again first. Ignore this on a casual turn.'"
+          command: "echo 'work is on for this session. When this prompt asks for work, follow the work skill. When it steers the work in a new direction, pick the playbook again. If its content is no longer in your context, load the work skill again first. Ignore this on a casual turn.'"
   SubagentStart:
     - matcher: "^(general-purpose|sonnet|claude|Plan)$"
       hooks:
         - type: command
           command: >-
-            echo '{"hookSpecificOutput": {"hookEventName": "SubagentStart", "additionalContext": "The parent session runs the work skill. Before any work, load the work skill and follow it."}}'
+            echo '{"hookSpecificOutput": {"hookEventName": "SubagentStart", "additionalContext": "The parent session runs the work skill. Before any work, load the work skill, then follow the playbook your brief names, or pick the one your brief matches."}}'
 ---
 
 # Work
@@ -29,7 +29,11 @@ The Principles section below grounds every trigger. In your reply, name each pri
 
 ## Playbooks
 
-Match the task to a playbook, open its file, and copy its steps into the todolist verbatim before any task-specific todos. A step you skip stays in the list with `skip: <reason>`. When a task spans several playbooks, name the current one and its exit evidence before moving on.
+Match the task to a playbook, open its file, and copy its steps into the todolist verbatim before any task-specific todos. A step you skip stays in the list with `skip: <reason>`.
+
+**Pick again** when the user's prompt steers the work in a new direction, when the current playbook reaches its exit evidence or routes onward and the work goes on, and when a delegated brief arrives; a follow-up within the current task keeps its playbook. Name the playbook you leave with its exit evidence or the reason it stopped, then the one you enter, and log the switch as a decision.
+
+**Delegate with the skill.** Every brief that hands off work, at any depth, tells the agent to load the work skill and names the playbook when you know which one fits; a brief without one leaves the agent to pick from it. Read-only lookups and reviews run on their own brief.
 
 Code is everything kept in version-controlled files: application code, tests, scripts, config, and infrastructure as code (manifests, roles, unit files, pipelines). Code playbooks work locally and offline: nothing is applied, initialized against a real backend, installed, or deployed; a code change reaches a live system only through Deploy. Ops are operations run against live systems by executing commands. A question about a live system's current behavior is Debug. A mixed task ("fix the Terraform module and roll it out") starts where the failure is observed and hands over at the boundary, naming the exit evidence.
 
@@ -53,10 +57,11 @@ Code is everything kept in version-controlled files: application code, tests, sc
 
 - **Guided.** The user runs every command and makes every change; you guide from their pasted output. Wraps the matched playbook. Use when the user asks to be guided or walked through, or says not to execute. [`guided.md`](playbooks/guided.md).
 - **TDD.** Build test-first in vertical slices at agreed seams. Wraps Implement. Use only when the user asks for TDD, test-first, or red-green. [`tdd.md`](playbooks/tdd.md).
+- **Auto.** Pursue one stated goal to completion as an orchestrator: fresh subagents run its units, each on the playbook it matches, chaining playbooks until the goal is met or only handovers remain. Wraps a sequence of playbooks. Use when the user asks for auto mode, orchestration, or a long run toward a goal. [`auto.md`](playbooks/auto.md).
 
 ## Work log
 
-Every task keeps one log, continued across the playbooks it chains through. It is the audit record the user reads weeks or months later, without running a command, to see what changed, why, on what evidence, how it was verified, and how to undo it; whatever the environment will lose by then must be in it. Write it only through `uv run <this skill's directory>/scripts/log.py`, run from inside the project (`--help` lists every field); each log is a directory `.work/<id>/` holding `log.yml` and its artifacts, excluded from git. Playbook steps say "log" for these calls:
+Every task keeps one log, continued across the playbooks it chains through. A delegate running its own playbook keeps its own log, started with `--parent <id>` when its brief gives the parent's log id so it nests inside the parent's directory (in another project or worktree, without `--parent`), and hands back its id and path, which the parent logs as a note; a stream inside the parent's playbook hands its evidence back for the parent's log. Each log has one writer. It is the audit record the user reads weeks or months later, without running a command, to see what changed, why, on what evidence, how it was verified, and how to undo it; whatever the environment will lose by then must be in it. Write it only through `uv run <this skill's directory>/scripts/log.py`, run from inside the project (`--help` lists every field); each log is a directory `.work/<id>/` holding `log.yml` and its artifacts, excluded from git. Playbook steps say "log" for these calls:
 
 - **Start** at the playbook's first step: `new <kebab-slug> --task "<one sentence>" --playbook <name>`. It prints the log id.
 - **Phase** at each playbook step: `phase <id> "<step number and name>"`. Later entries carry it.
