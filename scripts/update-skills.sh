@@ -31,6 +31,7 @@ SKILLS=(
     "https://github.com/cursor/plugins/tree/main/pstack/skills/create-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/figure-it-out"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/how"
+    "https://github.com/cursor/plugins/tree/main/pstack/skills/ketchup"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/maintain-verification-skill"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/recall"
     "https://github.com/cursor/plugins/tree/main/pstack/skills/reflect"
