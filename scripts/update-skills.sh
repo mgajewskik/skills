@@ -70,9 +70,20 @@ mirror_policy_for_codex() {
 }
 
 VENDORED=()
-for url in "${SKILLS[@]}"; do
-    VENDORED+=("$(basename "$url")")
+for entry in "${SKILLS[@]}"; do
+    read -r url local_name <<< "$entry"
+    VENDORED+=("${local_name:-$(basename "$url")}")
 done
+
+BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/update-skills-backup.XXXXXX")"
+
+replace_with_backup() {
+    local src="$1" dest="$2"
+    if [[ -e "$dest" ]]; then
+        mv "$dest" "$BACKUP_DIR/$(basename "$dest")"
+    fi
+    cp -R "$src" "$dest"
+}
 
 # A name written as "**name** skill" points nowhere unless it is a catalog skill or a work principle.
 warn_unresolved_skills() {
@@ -89,10 +100,11 @@ mkdir -p "$SKILL_DIR"
 
 failed=0
 
-for url in "${SKILLS[@]}"; do
+for entry in "${SKILLS[@]}"; do
+    read -r url local_name <<< "$entry"
     [[ "$url" =~ github\.com/([^/]+/[^/]+)/tree/([^/]+)/(.+) ]] || continue
     repo="${BASH_REMATCH[1]}" branch="${BASH_REMATCH[2]}" path="${BASH_REMATCH[3]}"
-    skill_name="$(basename "$path")"
+    skill_name="${local_name:-$(basename "$path")}"
     tmp_dir="/tmp/skill-$$"
 
     rm -rf "$tmp_dir"
@@ -110,8 +122,7 @@ for url in "${SKILLS[@]}"; do
     fi
 
     if [[ -d "$tmp_dir/$path" ]]; then
-        rm -rf "$SKILL_DIR/$skill_name"
-        cp -R "$tmp_dir/$path" "$SKILL_DIR/$skill_name"
+        replace_with_backup "$tmp_dir/$path" "$SKILL_DIR/$skill_name"
         echo "Updated: $skill_name"
         if is_user_only "$SKILL_DIR/$skill_name/SKILL.md"; then
             mirror_policy_for_codex "$skill_name" "$SKILL_DIR/$skill_name"
@@ -123,10 +134,21 @@ for url in "${SKILLS[@]}"; do
     rm -rf "$tmp_dir"
 done
 
+if ! BACKUP_DIR="$BACKUP_DIR/work-principles" "$SKILL_DIR/work/scripts/update.sh"; then
+    echo "Failed: work principles" >&2
+    failed=1
+fi
+
 for skill_name in "${VENDORED[@]}"; do
     if [[ -f "$SKILL_DIR/$skill_name/SKILL.md" ]]; then
         warn_unresolved_skills "$skill_name"
     fi
 done
+
+if [[ -n "$(ls -A "$BACKUP_DIR")" ]]; then
+    echo "Replaced folders saved in $BACKUP_DIR"
+else
+    rmdir "$BACKUP_DIR"
+fi
 
 exit "$failed"

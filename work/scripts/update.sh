@@ -25,11 +25,14 @@ if [[ ${#sources[@]} -eq 0 ]]; then
     exit 1
 fi
 
-mkdir -p "$DEST"
+backup_dir="${BACKUP_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/update-principles-backup.XXXXXX")}"
+mkdir -p "$DEST" "$backup_dir"
 for src in "${sources[@]}"; do
     name="$(basename "$src")"
     name="${name#principle-}"
-    rm -rf "${DEST:?}/$name"
+    if [[ -e "$DEST/$name" ]]; then
+        mv "$DEST/$name" "$backup_dir/$name"
+    fi
     cp -R "$src" "$DEST/$name"
     # Follow the rename and the move: the skill name and links to sibling principles drop the
     # prefix, and links to other catalog skills climb out of work/principles/.
@@ -38,3 +41,4 @@ for src in "${sources[@]}"; do
         's#\.\./(?!principle-)([a-z0-9-]+)/#../../../$1/#g; s#\.\./principle-#../#g' {} +
     echo "Updated: $name"
 done
+echo "Replaced principles saved in $backup_dir"
