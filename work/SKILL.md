@@ -20,6 +20,10 @@ hooks:
 
 The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
 
+**Goal first.** Before the first action, restate the user's goal and the smallest change that meets it, then proceed. Open each delegate brief and the final report with the goal.
+
+**Prototype before asking.** A fork that a local experiment or a read-only probe can settle (behavior, output, timing, whether a check tells the cases apart) is not the user's to answer. Run it and decide from what you observe. Ask only for a product or preference call that no experiment can settle.
+
 **No comments.** Code you write, and every delegate diff you accept, carries no comments. Make the code say it instead: a precise name, an extracted function, a type, a test. A surprise in our own code that this change can make obvious gets reshaped, not explained. Write a comment only in two cases:
 
 - The user asked for that comment.
@@ -86,7 +90,7 @@ Each principle names when it applies. When one fires, read its `SKILL.md` in ful
 - **Laziness Protocol** ([`principles/laziness-protocol`](principles/laziness-protocol/SKILL.md)). Refactoring, sizing a diff, or tempted to add abstractions, layers, or signal threading. Bias to deletion and the smallest change that solves the problem.
 - **Foundational Thinking** ([`principles/foundational-thinking`](principles/foundational-thinking/SKILL.md)). Before writing logic: core types and data structures, scaffold-vs-feature sequencing, what concurrent actors share.
 - **Redesign from First Principles** ([`principles/redesign-from-first-principles`](principles/redesign-from-first-principles/SKILL.md)). Integrating a new requirement into an existing design. Redesign as if it had been foundational from day one.
-- **Attack the Premise** ([`principles/attack-the-premise`](principles/attack-the-premise/SKILL.md)). Two or more fixes that share one premise have failed the same gate. Take a census of which actors hold the imbalance before the next fix, then question the premise instead of writing another fix that assumes it.
+- **Attack the Premise** ([`principles/attack-the-premise`](principles/attack-the-premise/SKILL.md)). Two or more fixes that share one premise have failed the same gate. Write the premise down and test it directly before you write another fix that assumes it.
 - **Subtract Before You Add** ([`principles/subtract-before-you-add`](principles/subtract-before-you-add/SKILL.md)). Sequencing an addition, refactor, or rewrite. Remove dead weight first, then build on the simpler base.
 - **Minimize Reader Load** ([`principles/minimize-reader-load`](principles/minimize-reader-load/SKILL.md)). Reviewing or shaping code that's hard to trace. Count layers and hidden state, collapse one-caller wrappers, shrink mutable scope.
 - **Outcome-Oriented Execution** ([`principles/outcome-oriented-execution`](principles/outcome-oriented-execution/SKILL.md)). Planned rewrites and migrations with explicit phase boundaries. Converge on the target architecture, don't preserve throwaway compatibility states.
@@ -106,9 +110,9 @@ Each principle names when it applies. When one fires, read its `SKILL.md` in ful
 **Verification**
 
 - **Prove It Works** ([`principles/prove-it-works`](principles/prove-it-works/SKILL.md)). After a task, before declaring done. Verify against the real artifact, not a proxy or "it compiles".
-- **Fix Root Causes** ([`principles/fix-root-causes`](principles/fix-root-causes/SKILL.md)). Debugging. Trace each symptom to its root cause, reproduce first, ask why until you reach it.
+- **Fix Root Causes** ([`principles/fix-root-causes`](principles/fix-root-causes/SKILL.md)). Debugging. Trace each symptom back to the first place the system went wrong and fix it there. A guard is a fix only when the state it handles is legitimate.
 - **Sequence Work into Verifiable Units** ([`principles/sequence-verifiable-units`](principles/sequence-verifiable-units/SKILL.md)). Multi-step work (sweeps, migrations, runs of similar edits) and how you stack commits and PRs. Break work into small units that each end in a check, verify each before the next, and order delivery so the sequence proves itself.
-- **Test Behavior, Not Implementation** ([`principles/test-behavior-not-implementation`](principles/test-behavior-not-implementation/SKILL.md)). Writing, changing, or keeping a test. Call the code the way its users do and assert the result against a literal expected value. If the test would still pass when every imported function returns `undefined`, rewrite the assertion or delete the test.
+- **Test Behavior, Not Implementation** ([`principles/test-behavior-not-implementation`](principles/test-behavior-not-implementation/SKILL.md)). Writing, changing, or keeping a test. Assert what the code's users can observe, so the test fails when that behavior breaks and keeps passing when only the internals change.
 - **Ground Claims in the Environment** ([`principles/ground-claims-in-the-environment`](principles/ground-claims-in-the-environment/SKILL.md)). Before acting on a claim about how code, a tool, an API, or a system behaves, and before any docs lookup. Verify it in the code and the versions where the work runs; read docs only for those versions.
 - **Explain the Number** ([`principles/explain-the-number`](principles/explain-the-number/SKILL.md)). Before you measure, and before you trust, report, or act on a number you measured (a speedup, a regression, a throughput, a latency, or an eval result). Find what limits it, and rule out that it measured something other than the work you think.
 
