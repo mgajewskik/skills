@@ -13,19 +13,23 @@ phase ID NAME                          start a playbook step; later entries carr
 add ID run|plan|evidence|decision|note ...  append a timeline entry; prints its number
 root-cause ID --summary TEXT --confidence LEVEL [--evidence N,N]
 close ID --status done|halted|reverted --summary TEXT
-check ID [--since N] [--max-age-hours H]  exit 0 only when every claim's latest evidence is established
-revert-plan ID                         newest first, how to undo each change not yet reverted
+check ID [--since N] [--max-age-hours H] [--revision REV] [--require CLAIM ...]
+                                       exit 0 only when every required and recorded claim is established
+revert-plan ID                         newest first, how to undo each change not yet reverted (includes
+                                       nested delegate logs)
 
 Every reversible change, run or planned, carries --revert; an irreversible one carries --revert or
---no-revert. An --artifact is copied beside log.yml as NNN-NAME, NNN being its entry's number. A wrong
-entry is corrected by a new one with --supersedes N; the file is never edited. Values and text artifacts
-that look like secrets are refused.
+--no-revert. Log a change as a plan before execution, then as a run with --from-plan N and --outcome
+ok|failed|unknown after execution. An --artifact is copied beside log.yml as NNN-NAME and substituted
+for {artifact} as a shell-quoted relative path. A wrong entry is corrected by a new one with
+--supersedes N; the file is never edited. Values and text artifacts that look like secrets are refused.
 """
 
 import argparse
 import datetime
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -34,15 +38,16 @@ from pathlib import Path
 import yaml
 
 WORK_DIR = ".work"
-SLUG = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*$")
+SLUG = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*\Z")
 CLASSES = ("read-only", "reversible", "irreversible")
 CHANGES = ("reversible", "irreversible")
+OUTCOMES = ("ok", "failed", "unknown")
+PLAN_IMMUTABLE_FIELDS = ("by", "command", "class", "target", "identity", "revert", "no_revert")
 ARTIFACT_PLACEHOLDER = "{artifact}"
 EVIDENCE_STATUSES = ("established", "failed", "unverified")
 CONFIDENCE = ("established", "leading-hypothesis", "unknown")
 LOG_STATUSES = ("open", "done", "halted", "reverted")
 
-# Secret detection, kept identical to work-mode's journal.py.
 SECRET_SHAPES = re.compile(
     r"AKIA[0-9A-Z]{16}"
     r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
@@ -109,7 +114,14 @@ def project_root():
 
 
 def exclude_from_git(root):
-    """Add .work/ to the repository's local exclude file, never to .gitignore."""
+    """Add .work/ to the repository's local exclude file when not already ignored."""
+    try:
+        ignored = subprocess.run(["git", "-C", str(root), "check-ignore", "-q", f"{WORK_DIR}/"],
+                                 capture_output=True)
+    except OSError:
+        return
+    if ignored.returncode == 0:
+        return
     try:
         exclude = subprocess.run(["git", "-C", str(root), "rev-parse", "--git-path", "info/exclude"],
                                  capture_output=True, text=True, check=True).stdout.strip()
@@ -117,17 +129,37 @@ def exclude_from_git(root):
         return
     exclude = Path(exclude) if Path(exclude).is_absolute() else root / exclude
     pattern = f"/{WORK_DIR}/"
-    lines = exclude.read_text().splitlines() if exclude.exists() else []
-    if pattern not in lines:
-        exclude.parent.mkdir(parents=True, exist_ok=True)
-        with exclude.open("a") as handle:
-            handle.write(("\n" if lines and lines[-1] else "") + pattern + "\n")
+    try:
+        lines = exclude.read_text().splitlines() if exclude.exists() else []
+        if pattern not in lines:
+            exclude.parent.mkdir(parents=True, exist_ok=True)
+            with exclude.open("a") as handle:
+                handle.write(("\n" if lines and lines[-1] else "") + pattern + "\n")
+    except OSError as error:
+        raise LogError(f"cannot exclude {WORK_DIR}/ from git ({exclude}): {error}") from None
+
+
+def validate_log_id(log_id):
+    segments = log_id.split("/")
+    if not log_id or any(not SLUG.match(segment) for segment in segments):
+        raise LogError(f"invalid log id {log_id!r}")
+    return log_id
+
+
+def work_root_dir(root=None):
+    base = (root or project_root()).resolve()
+    work_root = base / WORK_DIR
+    if work_root.is_symlink():
+        raise LogError(f"{work_root} must not be a symlink")
+    return work_root
 
 
 def locate(log_id):
-    path = project_root() / WORK_DIR / log_id / "log.yml"
-    if not path.exists():
-        raise LogError(f"no log {log_id!r} under {path.parent.parent}")
+    validate_log_id(log_id)
+    work_root = work_root_dir()
+    path = (work_root / log_id / "log.yml").resolve()
+    if not path.is_relative_to(work_root) or not path.is_file():
+        raise LogError(f"no log {log_id!r} under {work_root}")
     return path
 
 
@@ -147,19 +179,32 @@ def clean(name, value):
     return value
 
 
-def revert_view(timeline):
+def superseded_numbers(timeline, extra=None):
+    numbers = {e["supersedes"] for e in timeline if "supersedes" in e}
+    if extra is not None:
+        numbers.add(extra)
+    return numbers
+
+
+def revert_view(timeline, extra_superseded=None):
     """Every change not yet reverted, run or planned, newest first: the command that undoes it, or why
-    nothing can. A revert run is never listed itself."""
-    reverted = {e["reverts"] for e in timeline if "reverts" in e}
-    executed_plans = {e["from_plan"] for e in timeline if "from_plan" in e}
+    nothing can. A revert run is never listed itself, and only an ok revert settles its target."""
+    superseded = superseded_numbers(timeline, extra_superseded)
+    reverted = {e["reverts"] for e in timeline
+                if "reverts" in e and e["n"] not in superseded and e.get("outcome", "ok") == "ok"}
+    executed_plans = {e["from_plan"] for e in timeline if "from_plan" in e and e["n"] not in superseded}
     view = []
     for e in reversed(timeline):
-        if e["kind"] not in ("run", "plan") or e.get("class") not in CHANGES:
+        if e["n"] in superseded or e["kind"] not in ("run", "plan") or e.get("class") not in CHANGES:
             continue
         if "reverts" in e or e["n"] in reverted or e["n"] in executed_plans:
             continue
-        item = {"of": e["n"], "state": "executed" if e["kind"] == "run" else f"planned for {e['by']}",
-                "class": e["class"], "why": e.get("why", "")}
+        if e["kind"] == "plan":
+            state = f"planned for {e['by']}"
+        else:
+            outcome = e.get("outcome", "ok")
+            state = "executed" if outcome == "ok" else ("outcome unknown" if outcome == "unknown" else "failed")
+        item = {"of": e["n"], "state": state, "class": e["class"], "why": e.get("why", "")}
         if "revert" in e:
             item["command"] = e["revert"]
         else:
@@ -222,7 +267,7 @@ def cmd_new(args):
     if not SLUG.match(args.slug):
         raise LogError("slug must be kebab-case, such as fix-nginx-502")
     root = project_root()
-    work = root / WORK_DIR
+    work = work_root_dir(root)
     base = f"{datetime.date.today().isoformat()}-{args.slug}"
     if args.parent:
         locate(args.parent)
@@ -235,8 +280,8 @@ def cmd_new(args):
            "status": "open", "created": now(), "root_cause": None, "timeline": []}
     if args.parent:
         doc["parent"] = args.parent
-    (work / log_id).mkdir(parents=True)
     exclude_from_git(root)
+    (work / log_id).mkdir(parents=True)
     save(work / log_id / "log.yml", doc)
     print(log_id)
 
@@ -258,25 +303,38 @@ def cmd_add(args):
     phase = next((e["name"] for e in reversed(timeline) if e["kind"] == "phase"), None)
     if phase:
         entry["phase"] = phase
-    for field in ("text", "why", "target", "identity", "class", "by", "claim", "status", "revision",
+    for field in ("text", "why", "target", "identity", "class", "by", "outcome", "claim", "status", "revision",
                   "command", "revert", "no_revert", "result", "rejected"):
         value = getattr(args, field, None)
         if value is not None:
             entry[field] = clean(field.replace("_", "-"), value)
+    if "outcome" in entry and args.kind != "run":
+        raise LogError("--outcome goes on run entries")
     if args.evidence is not None:
         entry["evidence"] = entry_numbers(args.evidence, timeline)
+    if args.from_plan is not None and args.reverts is not None:
+        raise LogError("--from-plan and --reverts cannot be combined on one entry")
     if args.supersedes is not None:
         if args.supersedes not in {e["n"] for e in timeline}:
             raise LogError(f"entry {args.supersedes} does not exist")
         entry["supersedes"] = args.supersedes
+    effective_superseded = superseded_numbers(timeline, args.supersedes)
     if args.from_plan is not None:
         if args.kind != "run":
             raise LogError("--from-plan goes on the run that executed the plan")
         plan = next((e for e in timeline if e["n"] == args.from_plan and e["kind"] == "plan"), None)
-        settled = {e.get("from_plan") for e in timeline} | {e.get("reverts") for e in timeline}
-        if plan is None or args.from_plan in settled:
+        settled = {e.get("from_plan") for e in timeline if e["n"] not in effective_superseded} | {
+            e.get("reverts") for e in timeline
+            if e["n"] not in effective_superseded and e.get("outcome", "ok") == "ok"
+        }
+        if plan is None or args.from_plan in settled or args.from_plan in effective_superseded:
             raise LogError(f"entry {args.from_plan} is not a plan still waiting to run")
-        for field in ("why", "target", "identity", "class", "command", "revert", "no_revert"):
+        for field in PLAN_IMMUTABLE_FIELDS:
+            if field in plan and field in entry and entry[field] != plan[field]:
+                raise LogError(f"--{field.replace('_', '-')} conflicts with plan {args.from_plan}")
+        if ("revert" in plan and "no_revert" in entry) or ("no_revert" in plan and "revert" in entry):
+            raise LogError(f"recovery option conflicts with plan {args.from_plan}")
+        for field in ("why", *PLAN_IMMUTABLE_FIELDS):
             if field in plan:
                 entry.setdefault(field, plan[field])
         entry["from_plan"] = args.from_plan
@@ -289,7 +347,8 @@ def cmd_add(args):
     if args.reverts is not None:
         if args.kind != "run":
             raise LogError("--reverts goes on the run that executed the revert")
-        if args.reverts not in {item["of"] for item in revert_view(timeline) if "command" in item}:
+        active_reverts = revert_view(timeline, extra_superseded=args.supersedes)
+        if args.reverts not in {item["of"] for item in active_reverts if "command" in item}:
             raise LogError(f"entry {args.reverts} is not in the revert list")
         entry["reverts"] = args.reverts
     elif entry.get("class") == "reversible" and "revert" not in entry:
@@ -303,7 +362,7 @@ def cmd_add(args):
         name = save_artifact(path, args.artifact, entry["n"])
         entry["artifact"] = name
         doc.setdefault("artifacts", []).append(name)
-        relative = os.path.relpath(path.parent / name, project_root())
+        relative = shlex.quote(os.path.relpath(path.parent / name, project_root()))
         for field in ("command", "revert"):
             if field in entry:
                 entry[field] = entry[field].replace(ARTIFACT_PLACEHOLDER, relative)
@@ -331,11 +390,14 @@ def cmd_close(args):
 
 def cmd_check(args):
     doc = load(locate(args.id))
+    superseded = superseded_numbers(doc["timeline"])
     latest = {}
     for entry in doc["timeline"]:
-        if entry["kind"] == "evidence" and entry["n"] > args.since:
+        if entry["kind"] == "evidence" and entry["n"] > args.since and entry["n"] not in superseded:
             latest[entry["claim"]] = entry
-    if not latest:
+    required_claims = [clean("require", claim) for claim in (args.require or [])]
+    expected_revision = clean("revision", args.revision) if args.revision is not None else None
+    if not latest and not required_claims:
         print("no claims recorded")
         return 1
     cutoff = None
@@ -344,27 +406,71 @@ def cmd_check(args):
     passed = True
     for claim, entry in latest.items():
         status = entry["status"]
-        if cutoff and datetime.datetime.fromisoformat(entry["at"]) < cutoff:
+        detail = ""
+        if expected_revision is not None and entry.get("revision") != expected_revision:
+            status = "wrong-rev"
+            detail = f" (got {entry.get('revision', 'none')}, want {expected_revision})"
+        elif cutoff and datetime.datetime.fromisoformat(entry["at"]) < cutoff:
             status = "stale"
         passed = passed and status == "established"
-        print(f"{status:12} #{entry['n']:<4} {claim}")
+        print(f"{status:12} #{entry['n']:<4} {claim}{detail}")
+    for claim in required_claims:
+        if claim not in latest:
+            passed = False
+            print(f"{'missing':12} {'-':<5} {claim}")
     return 0 if passed else 1
 
 
-def cmd_revert_plan(args):
-    plan = revert_view(load(locate(args.id))["timeline"])
-    if not plan:
-        print("nothing to revert")
-        return
-    print(f"# run from {project_root()}\n")
+def latest_revert_timestamp(doc, plan):
+    by_n = {e["n"]: e for e in doc["timeline"]}
+    timestamps = [by_n[item["of"]]["at"] for item in plan if item["of"] in by_n and "at" in by_n[item["of"]]]
+    if timestamps:
+        return max(timestamps)
+    return doc.get("updated") or doc.get("created") or ""
+
+
+def print_revert_section(plan):
     executed = [item for item in plan if item["state"] == "executed"]
-    planned = [item for item in plan if item["state"] != "executed"]
+    uncertain = [item for item in plan if item["state"] in ("outcome unknown", "failed")]
+    planned = [item for item in plan if item["state"].startswith("planned")]
     for item in executed:
         print_revert(item, live=True)
+    if uncertain:
+        print("# --- failed or outcome unknown: check live state before reverting ---\n")
+    for item in uncertain:
+        print_revert(item, live=False)
     if planned:
         print("# --- planned, not known to have run: uncomment only for a change you ran ---\n")
     for item in planned:
         print_revert(item, live=False)
+
+
+def cmd_revert_plan(args):
+    parent_path = locate(args.id)
+    work_root = work_root_dir()
+    parent_plan = revert_view(load(parent_path)["timeline"])
+    child_plans = []
+    for child_path in parent_path.parent.rglob("log.yml"):
+        if child_path == parent_path:
+            continue
+        resolved = child_path.resolve()
+        if not resolved.is_relative_to(work_root):
+            continue
+        child_doc = load(resolved)
+        plan = revert_view(child_doc["timeline"])
+        if plan:
+            child_id = resolved.parent.relative_to(work_root).as_posix()
+            child_plans.append((latest_revert_timestamp(child_doc, plan), child_id, plan))
+    child_plans.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    if not parent_plan and not child_plans:
+        print("nothing to revert")
+        return
+    print(f"# run from {project_root()}\n")
+    if parent_plan:
+        print_revert_section(parent_plan)
+    for _, child_id, plan in child_plans:
+        print(f"# === delegate {child_id} ===\n")
+        print_revert_section(plan)
 
 
 def print_revert(item, live):
@@ -406,7 +512,8 @@ def parser():
     add.add_argument("--reverts", type=int, help="this run reverts entry N")
     add.add_argument("--from-plan", type=int, metavar="N", help="this run executed plan N (by the user or agent); "
                                                                  "fields it omits are copied from the plan")
-    add.add_argument("--by", choices=("agent", "user"), help="plan: who will run it")
+    add.add_argument("--by", choices=("agent", "user"), help="plan or run: who runs or ran it")
+    add.add_argument("--outcome", choices=OUTCOMES, help="run: ok (default), failed, or unknown")
     add.add_argument("--claim", help="evidence: the claim this evidence supports or fails")
     add.add_argument("--status", choices=EVIDENCE_STATUSES)
     add.add_argument("--revision", help="evidence: the running revision it is bound to")
@@ -429,12 +536,14 @@ def parser():
     close.add_argument("--status", choices=LOG_STATUSES[1:], required=True)
     close.add_argument("--summary", required=True)
 
-    check = sub.add_parser("check", help="gate on every claim's latest evidence")
+    check = sub.add_parser("check", help="gate on every required and recorded claim's latest evidence")
     check.add_argument("id")
     check.add_argument("--since", type=int, default=0, help="only evidence logged after entry N, such as the unit's run")
     check.add_argument("--max-age-hours", type=float)
+    check.add_argument("--revision", help="require every checked evidence entry to match this revision")
+    check.add_argument("--require", action="append", metavar="CLAIM", help="claim that must be established (repeatable)")
 
-    revert = sub.add_parser("revert-plan", help="print reverts newest first; never executes")
+    revert = sub.add_parser("revert-plan", help="print reverts newest first, including nested delegate logs; never executes")
     revert.add_argument("id")
     return top
 

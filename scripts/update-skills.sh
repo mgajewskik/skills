@@ -86,11 +86,18 @@ replace_with_backup() {
     cp -R "$src" "$dest"
 }
 
+is_work_principle() {
+    local name="${1#principle-}"
+    [[ -f "$SKILL_DIR/work/principles/$name.md" ]] && return 0
+    awk '/^## Principles$/ { in_principles = 1; next } /^## / { in_principles = 0 } in_principles { print }' \
+        "$SKILL_DIR/work/SKILL.md" | grep -qiE "^- \*\*${name//-/ }\.\*\*"
+}
+
 # A name written as "**name** skill" points nowhere unless it is a catalog skill or a work principle.
 warn_unresolved_skills() {
     local skill_name="$1" token
     while read -r token; do
-        if [[ ! -f "$SKILL_DIR/$token/SKILL.md" && ! -f "$SKILL_DIR/work/principles/${token#principle-}/SKILL.md" ]]; then
+        if [[ ! -f "$SKILL_DIR/$token/SKILL.md" ]] && ! is_work_principle "$token"; then
             echo "Warning: $skill_name: names the $token skill, which is not in the catalog" >&2
         fi
     done < <(grep -rhoE '(\*\*|`)[a-z][a-z0-9-]*(\*\*|`)( principle)? skill' "$SKILL_DIR/$skill_name" \
@@ -140,7 +147,7 @@ if ! BACKUP_DIR="$BACKUP_DIR/work-principles" "$SKILL_DIR/work/scripts/update.sh
     failed=1
 fi
 
-for skill_name in "${VENDORED[@]}"; do
+for skill_name in "${VENDORED[@]}" work; do
     if [[ -f "$SKILL_DIR/$skill_name/SKILL.md" ]]; then
         warn_unresolved_skills "$skill_name"
     fi

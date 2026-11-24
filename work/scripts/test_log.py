@@ -29,6 +29,7 @@ class LogTest(unittest.TestCase):
         self.project = Path(self.tmp.name) / "project"
         (self.project / "sub").mkdir(parents=True)
         subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        subprocess.run(["git", "-C", str(self.project), "config", "core.excludesFile", "/dev/null"], check=True)
         self.old_cwd = os.getcwd()
         os.chdir(self.project)
 
@@ -286,6 +287,181 @@ class LogTest(unittest.TestCase):
         self.assertEqual((doc["status"], doc["summary"]), ("done", "raised the limit"))
         self.assertEqual([e["n"] for e in doc["timeline"]], [1, 2])
         self.assertEqual(doc["timeline"][1]["text"], "pasted output:\n\n- n: 9\n  kind: run")
+
+    def test_check_enforces_required_claims_revision_and_supersedes(self):
+        log_id = self.new()
+        self.ok("add", log_id, "evidence", "--claim", "health 200", "--status", "established",
+                "--command", "curl /health", "--revision", "v1")
+        self.assertEqual(self.run_log("check", log_id, "--require", "health 200", "--require", "neg space")[0], 1)
+        self.assertEqual(self.run_log("check", log_id, "--revision", "v2")[0], 1)
+        self.ok("add", log_id, "evidence", "--claim", "health 200", "--status", "established",
+                "--command", "curl /health", "--revision", "v2")
+        self.ok("add", log_id, "evidence", "--claim", "typo claim", "--status", "failed",
+                "--command", "check neg", "--revision", "v2")
+        self.assertEqual(self.run_log("check", log_id, "--since", "1", "--revision", "v2",
+                                      "--require", "health 200")[0], 1)
+        self.ok("add", log_id, "evidence", "--claim", "neg space", "--status", "established",
+                "--command", "check neg", "--revision", "v2", "--supersedes", "3")
+        self.assertEqual(self.run_log("check", log_id, "--since", "1", "--revision", "v2",
+                                      "--require", "health 200", "--require", "neg space")[0], 0)
+
+    def test_failed_and_unknown_reverts_keep_original_recovery_active(self):
+        log_id = self.new()
+        self.ok("add", log_id, "run", "--class", "reversible", "--why", "scale up",
+                "--command", "scale 5", "--revert", "scale 3")
+        self.ok("add", log_id, "run", "--class", "reversible", "--reverts", "1",
+                "--command", "scale 3", "--outcome", "failed", "--result", "exit 1")
+        self.assertEqual([r["of"] for r in self.doc(log_id)["revert"]], [1])
+        self.assertIn("scale 3", self.ok("revert-plan", log_id))
+        self.ok("add", log_id, "run", "--class", "reversible", "--reverts", "1",
+                "--command", "scale 3", "--outcome", "unknown", "--result", "timed out")
+        self.assertEqual([r["of"] for r in self.doc(log_id)["revert"]], [1])
+        self.ok("add", log_id, "run", "--class", "reversible", "--reverts", "1",
+                "--command", "scale 3", "--outcome", "ok", "--result", "replicas=3")
+        self.assertEqual(self.doc(log_id)["revert"], [])
+        self.assertEqual(self.ok("revert-plan", log_id), "nothing to revert")
+
+    def test_unknown_and_failed_change_outcomes_are_commented_in_revert_plan(self):
+        log_id = self.new()
+        self.ok("add", log_id, "run", "--class", "reversible", "--why", "timed out patch",
+                "--command", "apply x", "--revert", "undo x", "--outcome", "unknown")
+        self.ok("add", log_id, "run", "--class", "reversible", "--why", "failed patch",
+                "--command", "apply y", "--revert", "undo y", "--outcome", "failed")
+        plan_text = self.ok("revert-plan", log_id)
+        self.assertIn("# undo x", plan_text)
+        self.assertIn("# undo y", plan_text)
+        self.assertNotIn("\nundo x\n", plan_text)
+        self.assertNotIn("\nundo y\n", plan_text)
+
+    def test_from_plan_rejects_conflicting_fields_and_preserves_recovery(self):
+        log_id = self.new()
+        self.ok("add", log_id, "plan", "--by", "user", "--class", "reversible", "--why", "scale up",
+                "--target", "ctx=prod", "--identity", "ops", "--command", "scale 5", "--revert", "scale 3")
+        before = log.locate(log_id).read_bytes()
+        for bad in (("--class", "read-only"),
+                    ("--command", "scale 6"),
+                    ("--target", "ctx=staging"),
+                    ("--identity", "admin"),
+                    ("--by", "agent"),
+                    ("--revert", "scale 1")):
+            self.assertEqual(self.run_log("add", log_id, "run", "--from-plan", "1", *bad)[0], 2, bad)
+        self.assertEqual(log.locate(log_id).read_bytes(), before)
+        self.ok("add", log_id, "run", "--from-plan", "1", "--outcome", "ok", "--result", "scaled")
+        self.assertEqual(self.doc(log_id)["timeline"][-1]["by"], "user")
+        self.assertEqual(self.doc(log_id)["revert"][0]["command"], "scale 3")
+
+    def test_log_id_path_traversal_and_symlink_escape_are_rejected(self):
+        outside = Path(self.tmp.name) / "outside"
+        outside.mkdir()
+        outside_log = outside / "log.yml"
+        outside_log.write_text("id: x\ntimeline: []\n")
+        before = outside_log.read_text()
+        for bad_id in ("../../outside", "/tmp/outside", "../outside", "a/../../outside", f"{TODAY}-fix-api\n"):
+            self.assertEqual(self.run_log("close", bad_id, "--status", "done", "--summary", "pwn")[0], 2, bad_id)
+        self.assertEqual(self.run_log("new", "fix-api\n", "--task", "t", "--playbook", "debug")[0], 2)
+        (self.project / ".work").mkdir(exist_ok=True)
+        (self.project / ".work" / f"{TODAY}-escape").symlink_to(outside)
+        self.assertEqual(self.run_log("close", f"{TODAY}-escape", "--status", "done", "--summary", "pwn")[0], 2)
+        self.assertEqual(outside_log.read_text(), before)
+
+        (self.project / ".work" / f"{TODAY}-escape").unlink()
+        (self.project / ".work").rmdir()
+        (self.project / ".work").symlink_to(outside)
+        (outside / f"{TODAY}-linked").mkdir()
+        (outside / f"{TODAY}-linked" / "log.yml").write_text("id: x\ntimeline: []\n")
+        self.assertEqual(self.run_log("close", f"{TODAY}-linked", "--status", "done", "--summary", "pwn")[0], 2)
+        self.assertEqual(self.run_log("new", "linked-new", "--task", "t", "--playbook", "debug")[0], 2)
+        self.assertEqual((outside / f"{TODAY}-linked" / "log.yml").read_text(), "id: x\ntimeline: []\n")
+
+    def test_artifact_paths_with_spaces_are_shell_quoted_and_executable(self):
+        log_id = self.new()
+        snap = self.file("before snapshot.txt")
+        snap.write_text("saved-state-42\n")
+        self.ok("add", log_id, "run", "--class", "reversible", "--why", "update",
+                "--command", "write new", "--revert", "cat {artifact}", "--artifact", str(snap))
+        plan_lines = [line for line in self.ok("revert-plan", log_id).splitlines()
+                      if line and not line.startswith("#")]
+        self.assertEqual(len(plan_lines), 1)
+        out = subprocess.run(["sh", "-c", plan_lines[0]], cwd=self.project, capture_output=True, text=True, check=True)
+        self.assertEqual(out.stdout, "saved-state-42\n")
+
+    def test_exclude_from_git_respects_existing_ignore_and_fails_cleanly_when_unwritable(self):
+        (self.project / ".gitignore").write_text("/.work/\n")
+        exclude = self.project / ".git" / "info" / "exclude"
+        exclude.chmod(0o444)
+        try:
+            log_id = self.new("ignored-ok")
+            self.assertTrue((self.project / ".work" / log_id / "log.yml").is_file())
+        finally:
+            exclude.chmod(0o644)
+
+        (self.project / ".gitignore").unlink()
+        info_dir = self.project / ".git" / "info"
+        exclude.chmod(0o444)
+        info_dir.chmod(0o555)
+        try:
+            code, _ = self.run_log("new", "unwritable", "--task", "t", "--playbook", "debug")
+            self.assertEqual(code, 2)
+            self.assertFalse((self.project / ".work" / f"{TODAY}-unwritable").exists())
+        finally:
+            info_dir.chmod(0o755)
+            exclude.chmod(0o644)
+
+    def test_superseded_plan_and_nested_delegate_reverts(self):
+        parent = self.ok("new", "ship-api", "--task", "ship", "--playbook", "auto")
+        child = self.ok("new", "patch-cfg", "--task", "patch", "--playbook", "live-modify", "--parent", parent)
+        self.ok("add", child, "plan", "--by", "agent", "--class", "reversible", "--why", "typo",
+                "--command", "set wrong", "--revert", "unset wrong")
+        self.ok("add", child, "plan", "--by", "agent", "--class", "reversible", "--why", "right",
+                "--command", "set right", "--revert", "unset right", "--supersedes", "1")
+        self.ok("add", child, "run", "--from-plan", "2", "--outcome", "ok")
+        child_plan = self.ok("revert-plan", child)
+        self.assertIn("unset right", child_plan)
+        self.assertNotIn("unset wrong", child_plan)
+        parent_plan = self.ok("revert-plan", parent)
+        self.assertIn(child, parent_plan)
+        self.assertIn("unset right", parent_plan)
+
+    def test_superseding_from_plan_and_revert_entries_and_disallowing_invalid_combos(self):
+        log_id = self.new()
+        self.ok("add", log_id, "plan", "--by", "agent", "--class", "reversible", "--why", "scale",
+                "--command", "scale 5", "--revert", "scale 3")
+        self.assertEqual(self.run_log("add", log_id, "run", "--from-plan", "1", "--supersedes", "1")[0], 2)
+        self.ok("add", log_id, "run", "--from-plan", "1", "--outcome", "ok")
+        self.ok("add", log_id, "run", "--from-plan", "1", "--outcome", "unknown", "--supersedes", "2")
+        self.assertIn("# scale 3", self.ok("revert-plan", log_id))
+
+        log_id2 = self.new("revert-fix")
+        self.ok("add", log_id2, "run", "--class", "reversible", "--why", "patch",
+                "--command", "patch on", "--revert", "patch off")
+        self.assertEqual(self.run_log("add", log_id2, "run", "--class", "reversible", "--command", "patch off",
+                                      "--reverts", "1", "--supersedes", "1")[0], 2)
+        self.ok("add", log_id2, "run", "--class", "reversible", "--command", "patch off",
+                "--reverts", "1", "--outcome", "ok")
+        self.assertEqual(self.ok("revert-plan", log_id2), "nothing to revert")
+        self.ok("add", log_id2, "run", "--class", "reversible", "--command", "patch off",
+                "--reverts", "1", "--outcome", "failed", "--supersedes", "2")
+        self.assertIn("patch off", self.ok("revert-plan", log_id2))
+
+        self.ok("add", log_id2, "plan", "--by", "agent", "--class", "reversible", "--why", "second",
+                "--command", "set b", "--revert", "unset b")
+        self.assertEqual(self.run_log("add", log_id2, "run", "--from-plan", "4", "--reverts", "1")[0], 2)
+        self.assertEqual(self.run_log("check", log_id2, "--require", "   ")[0], 2)
+
+    def test_delegate_reverts_are_ordered_chronologically_newest_first(self):
+        parent = self.ok("new", "rollout", "--task", "rollout", "--playbook", "auto")
+        first = self.ok("new", "deploy-db", "--task", "db", "--playbook", "deploy", "--parent", parent)
+        second = self.ok("new", "deploy-api", "--task", "api", "--playbook", "deploy", "--parent", parent)
+        self.ok("add", first, "run", "--class", "reversible", "--why", "db", "--command", "db up", "--revert", "db down")
+        self.ok("add", second, "run", "--class", "reversible", "--why", "api", "--command", "api up", "--revert", "api down")
+        first_doc = self.doc(first)
+        second_doc = self.doc(second)
+        first_doc["timeline"][0]["at"] = "2026-11-23T10:00:00+00:00"
+        second_doc["timeline"][0]["at"] = "2026-11-23T11:00:00+00:00"
+        log.save(log.locate(first), first_doc)
+        log.save(log.locate(second), second_doc)
+        output = self.ok("revert-plan", parent)
+        self.assertLess(output.index("api down"), output.index("db down"))
 
 
 if __name__ == "__main__":

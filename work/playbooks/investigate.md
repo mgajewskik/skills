@@ -1,0 +1,11 @@
+# Investigate
+
+For read-only analysis of code, config, skills, or infrastructure as code: audits, architecture exploration, understanding how something works, and comparing options (use [`review.md`](review.md) for an adversarial PASS-gate review of a diff, branch, PR, or implementation). The deliverable is evidence-backed findings, ranked by impact or leverage, with unknowns stated explicitly. Nothing changes on disk or on live systems; skip creating a `.work/` log when the user asks for no workspace writes.
+
+1. **Fix the question and scope.** Exact paths, revision or diff, constraints (including read-only / no-edit), and what counts as an established finding. Done when you know what is in scope and what must stay untouched.
+2. **Inspect the sources and environment.** Read the target files, git history, configs, and installed tool versions directly (**[ground-claims-in-the-environment](../principles/ground-claims-in-the-environment.md)**). Route broad discovery across many files to read-only subagents running on their own brief, then verify every headline finding directly in the source (**[prove-it-works](../principles/prove-it-works.md)**). Done when every claim you plan to make points to a file and line or command output.
+3. **Run local read-only checks.** Run validators, linters, read-only test suites, or small probes that leave the working tree untouched, only when permitted by user constraints. Skip when the user forbids running commands. Done when checks complete and observed results are separated from static inspection.
+4. **Synthesize findings.** Separate verified facts from inferences, rank defects, contradictions, and improvements by leverage or severity, and name what was not executed or remains unproven.
+5. **Route if follow-up work is requested.** Defects go to Fix, changes to Implement, simplification to Reduce, diff/implementation verification to Review, live symptoms to Debug. Investigation never silently edits files.
+
+**Reply.** Findings ranked by impact or leverage with file:line citations, checks run versus unverified areas, and concrete next options if follow-up is requested.
