@@ -13,6 +13,7 @@ phase ID NAME                          start a playbook step; later entries carr
 add ID run|plan|evidence|decision|note ...  append a timeline entry; prints its number
 root-cause ID --summary TEXT --confidence LEVEL [--evidence N,N]
 close ID --status done|halted|reverted --summary TEXT
+reopen ID --why TEXT                   reopen a closed log (e.g., to record a later revert)
 check ID [--since N] [--max-age-hours H] [--revision REV] [--require CLAIM ...]
                                        exit 0 only when every required and recorded claim is established
 revert-plan ID                         newest first, how to undo each change not yet reverted (includes
@@ -20,14 +21,15 @@ revert-plan ID                         newest first, how to undo each change not
 
 Every reversible change, run or planned, carries --revert; an irreversible one is user-executed
 (--by user) and carries --revert or --no-revert. Log an Ops change as a plan before execution, then
-as a run with --from-plan N and --outcome ok|failed|unknown after execution. An --artifact is copied
-beside log.yml as NNN-NAME and substituted for {artifact} as a shell-quoted relative path. A wrong
-entry is corrected by a new one with --supersedes N; the file is never edited. Values and text
-artifacts that look like secrets are refused.
+as a run with --from-plan N and --outcome ok|failed|unknown after execution. An --artifact (or piped
+stdin via --artifact-name NAME) is saved beside log.yml as NNN-NAME and substituted for {artifact}
+as a shell-quoted relative path. A wrong entry is corrected by a new one with --supersedes N; the
+file is never edited. Values and text artifacts that look like secrets are refused.
 """
 
 import argparse
 import datetime
+import io
 import math
 import os
 import re
@@ -54,18 +56,18 @@ LOG_STATUSES = ("open", "done", "halted", "reverted")
 ALLOWED_FIELDS = {
     "run": frozenset({
         "command", "class", "by", "why", "target", "identity", "outcome",
-        "revert", "no_revert", "result", "from_plan", "reverts", "supersedes", "artifact",
+        "revert", "no_revert", "result", "from_plan", "reverts", "supersedes", "artifact", "artifact_name",
     }),
     "plan": frozenset({
         "command", "class", "by", "why", "target", "identity",
-        "revert", "no_revert", "supersedes", "artifact",
+        "revert", "no_revert", "supersedes", "artifact", "artifact_name",
     }),
     "evidence": frozenset({
         "claim", "status", "command", "why", "target", "identity",
-        "revision", "result", "supersedes", "artifact",
+        "revision", "result", "supersedes", "artifact", "artifact_name",
     }),
-    "decision": frozenset({"text", "why", "evidence", "rejected", "supersedes", "artifact"}),
-    "note": frozenset({"text", "why", "supersedes", "artifact"}),
+    "decision": frozenset({"text", "why", "evidence", "rejected", "supersedes", "artifact", "artifact_name"}),
+    "note": frozenset({"text", "why", "supersedes", "artifact", "artifact_name"}),
 }
 ALL_OPTIONAL_FIELDS = tuple(sorted(frozenset().union(*ALLOWED_FIELDS.values())))
 
@@ -316,6 +318,9 @@ def revert_view(timeline, extra_superseded=None):
             outcome = e.get("outcome", "ok")
             state = "executed" if outcome == "ok" else ("outcome unknown" if outcome == "unknown" else "failed")
         item = {"of": e["n"], "state": state, "class": e["class"], "why": e.get("why", "")}
+        for meta in ("target", "identity"):
+            if meta in e:
+                item[meta] = e[meta]
         if "revert" in e:
             item["command"] = e["revert"]
         else:
@@ -360,36 +365,79 @@ def save(path, doc):
         raise LogError(f"cannot write {path}: {error}") from None
 
 
-def file_looks_secret(source):
+def stream_looks_secret(handle):
     chunk_size = 1024 * 1024
     overlap = 4096
     tail = ""
+    while True:
+        raw = handle.read(chunk_size)
+        if not raw:
+            break
+        text = tail + raw.decode("utf-8", errors="replace")
+        if looks_secret(text):
+            return True
+        tail = text[-overlap:]
+    return False
+
+
+def file_looks_secret(source):
     try:
         with source.open("rb") as handle:
-            while True:
-                raw = handle.read(chunk_size)
-                if not raw:
-                    break
-                text = tail + raw.decode("utf-8", errors="replace")
-                if looks_secret(text):
-                    return True
-                tail = text[-overlap:]
+            return stream_looks_secret(handle)
     except OSError as error:
         raise LogError(f"cannot read artifact {source}: {error}") from None
-    return False
+
+
+def validate_artifact_name(raw):
+    if "\x00" in raw or "\n" in raw or "\r" in raw:
+        raise LogError(f"invalid artifact name {raw!r}")
+    name = raw.strip()
+    if not name or name in (".", "..") or "/" in name or "\\" in name or Path(name).name != name:
+        raise LogError(f"invalid artifact name {raw!r}")
+    if looks_secret(name):
+        raise LogError("--artifact-name looks like it contains a secret; redact it and try again")
+    return name
 
 
 def save_artifact(path, source, n):
     source = Path(source)
     if not source.is_file():
         raise LogError(f"artifact {source} is not a file")
-    if looks_secret(source.name) or file_looks_secret(source):
+    clean_name = validate_artifact_name(source.name)
+    if file_looks_secret(source):
         raise LogError(f"artifact {source} looks like it contains a secret; redact it and try again")
-    name = f"{n:03d}-{source.name}"
+    name = f"{n:03d}-{clean_name}"
     try:
         shutil.copy2(source, path.parent / name)
     except (OSError, shutil.SameFileError) as error:
         raise LogError(f"cannot save artifact {source}: {error}") from None
+    return name
+
+
+def save_stdin_artifact(path, raw_name, n):
+    clean_name = validate_artifact_name(raw_name)
+    if sys.stdin.isatty():
+        raise LogError("--artifact-name reads from stdin; pipe input or use --artifact PATH")
+    try:
+        raw = sys.stdin.buffer.read()
+    except OSError as error:
+        raise LogError(f"cannot read artifact from stdin: {error}") from None
+    if stream_looks_secret(io.BytesIO(raw)):
+        raise LogError(f"stdin artifact {clean_name!r} looks like it contains a secret; redact it and try again")
+    name = f"{n:03d}-{clean_name}"
+    target = path.parent / name
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=path.parent, prefix=f".{name}.", suffix=".tmp", delete=False
+        ) as handle:
+            tmp_path = Path(handle.name)
+            handle.write(raw)
+        os.replace(tmp_path, target)
+    except OSError as error:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        raise LogError(f"cannot save artifact {name}: {error}") from None
     return name
 
 
@@ -482,10 +530,15 @@ def cmd_add(args):
             raise LogError(f"entry {args.supersedes} does not exist")
         entry["supersedes"] = args.supersedes
     effective_superseded = superseded_numbers(timeline, args.supersedes)
-    phase = next(
-        (e["name"] for e in reversed(timeline) if e["kind"] == "phase" and e["n"] not in effective_superseded),
-        None,
-    )
+    phase = None
+    for existing in reversed(timeline):
+        if existing["n"] in effective_superseded:
+            continue
+        if existing["kind"] == "reopen":
+            break
+        if existing["kind"] == "phase":
+            phase = existing["name"]
+            break
     if phase:
         entry["phase"] = phase
     for field in ("text", "why", "target", "identity", "class", "by", "outcome", "claim", "status", "revision",
@@ -541,12 +594,17 @@ def cmd_add(args):
         raise LogError("a reversible change needs --revert")
     elif entry.get("class") == "irreversible" and "revert" not in entry and "no_revert" not in entry:
         raise LogError("an irreversible change needs --revert (best-known recovery) or --no-revert REASON")
+    if args.artifact is not None and args.artifact_name is not None:
+        raise LogError("--artifact and --artifact-name cannot be combined")
     uses_artifact = any(ARTIFACT_PLACEHOLDER in entry.get(f, "") for f in ("command", "revert"))
-    if uses_artifact and not args.artifact:
-        raise LogError(f"{ARTIFACT_PLACEHOLDER} needs --artifact")
-    if args.artifact:
+    if uses_artifact and args.artifact is None and args.artifact_name is None:
+        raise LogError(f"{ARTIFACT_PLACEHOLDER} needs --artifact or --artifact-name")
+    if args.artifact is not None or args.artifact_name is not None:
         root = project_root(for_locate=True)
-        name = save_artifact(path, args.artifact, entry["n"])
+        if args.artifact is not None:
+            name = save_artifact(path, args.artifact, entry["n"])
+        else:
+            name = save_stdin_artifact(path, args.artifact_name, entry["n"])
         entry["artifact"] = name
         doc.setdefault("artifacts", []).append(name)
         relative = shlex.quote(os.path.relpath(path.parent / name, root))
@@ -575,6 +633,22 @@ def cmd_close(args):
     doc["status"] = args.status
     doc["summary"] = clean("summary", args.summary)
     save(path, doc)
+
+
+def cmd_reopen(args):
+    path = locate(args.id)
+    doc = load(path)
+    prev_status = doc.get("status", "open")
+    if prev_status == "open":
+        raise LogError(f"log {args.id!r} is already open")
+    why = clean("why", args.why)
+    entry = {"n": len(doc["timeline"]) + 1, "at": now(), "kind": "reopen", "from_status": prev_status, "why": why}
+    if "summary" in doc:
+        entry["previous_summary"] = doc.pop("summary")
+    doc["status"] = "open"
+    doc["timeline"].append(entry)
+    save(path, doc)
+    print(entry["n"])
 
 
 def cmd_check(args):
@@ -641,6 +715,10 @@ def print_comment_lines(prefix, text):
 
 def print_revert(item, live):
     print_comment_lines(f"# #{item['of']} {item['state']}, {item['class']}: ", item["why"])
+    if "target" in item:
+        print_comment_lines("# target: ", item["target"])
+    if "identity" in item:
+        print_comment_lines("# identity: ", item["identity"])
     if "no_revert" in item:
         print_comment_lines("# cannot be reverted: ", item["no_revert"])
         print()
@@ -743,6 +821,7 @@ def parser():
     add.add_argument("--rejected", help="decision: the alternatives not chosen and why")
     add.add_argument("--supersedes", type=int, metavar="N", help="this entry corrects entry N")
     add.add_argument("--artifact", help="a file to save beside the log as NNN-NAME")
+    add.add_argument("--artifact-name", metavar="NAME", help="read an artifact from stdin and save beside the log as NNN-NAME")
 
     cause = sub.add_parser("root-cause", help="set the root cause")
     cause.add_argument("id")
@@ -754,6 +833,10 @@ def parser():
     close.add_argument("id")
     close.add_argument("--status", choices=LOG_STATUSES[1:], required=True)
     close.add_argument("--summary", required=True)
+
+    reopen = sub.add_parser("reopen", help="reopen a closed log")
+    reopen.add_argument("id")
+    reopen.add_argument("--why", required=True, help="why the closed log is being reopened")
 
     check = sub.add_parser("check", help="gate on every required and recorded claim's latest evidence")
     check.add_argument("id")
@@ -770,7 +853,7 @@ def parser():
 def main(argv=None):
     args = parser().parse_args(argv)
     handlers = {"new": cmd_new, "phase": cmd_phase, "add": cmd_add, "root-cause": cmd_root_cause, "close": cmd_close,
-                "check": cmd_check, "revert-plan": cmd_revert_plan}
+                "reopen": cmd_reopen, "check": cmd_check, "revert-plan": cmd_revert_plan}
     try:
         return handlers[args.action](args) or 0
     except LogError as error:

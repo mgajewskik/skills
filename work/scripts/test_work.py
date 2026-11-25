@@ -245,6 +245,14 @@ class WorkSkillTest(unittest.TestCase):
             self.assertIn("never spawn a reviewer", text, caller)
             self.assertNotIn("when running as an `auto` unit", text, caller)
 
+    def test_debug_playbook_and_skill_document_artifacts_suggest_closing_and_reopen(self):
+        debug_text = (WORK_DIR / "playbooks" / "debug.md").read_text().lower()
+        self.assertIn("--artifact", debug_text)
+        self.assertIn("--from-plan", debug_text)
+        skill_text = (WORK_DIR / "SKILL.md").read_text().lower()
+        self.assertIn("reopen <id>", skill_text)
+        self.assertIn("--artifact-name", skill_text)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

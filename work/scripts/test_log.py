@@ -636,6 +636,127 @@ class LogTest(unittest.TestCase):
         self.assertEqual(self.ok("add", ng_id, "note", "--text", "found from subdir"), "1")
         self.assertEqual(self.ok("revert-plan", ng_id), "nothing to revert")
 
+        no_nl_repo = Path(self.tmp.name) / "no-nl-repo"
+        no_nl_repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(no_nl_repo)], check=True)
+        subprocess.run(["git", "-C", str(no_nl_repo), "config", "core.excludesFile", "/dev/null"], check=True)
+        no_nl_exclude = no_nl_repo / ".git" / "info" / "exclude"
+        no_nl_exclude.write_text("# existing\n*.tmp")
+        os.chdir(no_nl_repo)
+        self.new("no-nl")
+        self.assertEqual(no_nl_exclude.read_text(), "# existing\n*.tmp\n/.work/\n")
+
+    def test_reopen_allows_post_close_revert_and_preserves_history(self):
+        log_id = self.new("late-revert")
+        self.ok("phase", log_id, "5. Execute")
+        self.ok("add", log_id, "run", "--class", "reversible", "--why", "raise limit",
+                "--command", "set limit 4096", "--revert", "set limit 1024")
+        self.assertEqual(self.run_log("reopen", log_id, "--why", "still open")[0], 2)
+        self.ok("close", log_id, "--status", "done", "--summary", "applied limit change")
+        self.assertIn("set limit 1024", self.ok("revert-plan", log_id))
+        self.assertEqual(self.run_log("add", log_id, "run", "--class", "reversible",
+                                      "--command", "set limit 1024", "--reverts", "2", "--outcome", "ok")[0], 2)
+        self.assertEqual(self.run_log("reopen", log_id, "--why", "token: ghp_abcdefghijklmnopqrstuvwxyz0123456789")[0], 2)
+        reopen_n = self.ok("reopen", log_id, "--why", "latency regressed; reverting limit")
+        self.assertEqual(reopen_n, "3")
+        reopened_doc = self.doc(log_id)
+        self.assertEqual(reopened_doc["status"], "open")
+        self.assertNotIn("summary", reopened_doc)
+        self.assertEqual(reopened_doc["timeline"][-1]["kind"], "reopen")
+        self.assertEqual(reopened_doc["timeline"][-1]["from_status"], "done")
+        self.assertEqual(reopened_doc["timeline"][-1]["previous_summary"], "applied limit change")
+        self.assertEqual(reopened_doc["timeline"][-1]["why"], "latency regressed; reverting limit")
+        self.ok("add", log_id, "run", "--class", "reversible", "--command", "set limit 1024",
+                "--reverts", "2", "--outcome", "ok", "--result", "limit=1024")
+        self.assertNotIn("phase", self.doc(log_id)["timeline"][-1])
+        self.assertEqual(self.ok("revert-plan", log_id), "nothing to revert")
+        self.ok("close", log_id, "--status", "reverted", "--summary", "reverted limit change after regression")
+        closed_doc = self.doc(log_id)
+        self.assertEqual(closed_doc["status"], "reverted")
+        self.assertEqual(closed_doc["summary"], "reverted limit change after regression")
+        self.assertEqual(closed_doc["revert"], [])
+
+    def test_revert_plan_includes_target_and_identity_safely_when_present(self):
+        log_id = self.new("target-meta")
+        self.ok("add", log_id, "run", "--class", "reversible", "--why", "scale api",
+                "--target", "ctx=prod ns=api\nrm -rf /tmp/bad-target",
+                "--identity", "ops-deploy\necho bad-id",
+                "--command", "scale 5", "--revert", "scale 3")
+        doc = self.doc(log_id)
+        self.assertEqual(doc["revert"][0]["target"], "ctx=prod ns=api\nrm -rf /tmp/bad-target")
+        self.assertEqual(doc["revert"][0]["identity"], "ops-deploy\necho bad-id")
+        plan = self.ok("revert-plan", log_id)
+        self.assertIn("# target: ctx=prod ns=api\n# rm -rf /tmp/bad-target\n", plan)
+        self.assertIn("# identity: ops-deploy\n# echo bad-id\n", plan)
+        executable = [line for line in plan.splitlines() if line.strip() and not line.startswith("#")]
+        self.assertEqual(executable, ["scale 3"])
+
+    def test_artifact_name_captures_stdin_validates_secrets_and_substitutes_placeholder(self):
+        log_id = self.new("stdin-art")
+        script = str(Path(__file__).resolve().parent / "log.py")
+        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+
+        def run_cli(argv, stdin_bytes=b""):
+            return subprocess.run(
+                [sys.executable, script, *argv],
+                cwd=self.project,
+                input=stdin_bytes,
+                capture_output=True,
+                env=env,
+            )
+
+        res = run_cli(
+            ["add", log_id, "run", "--class", "reversible", "--why", "patch cm",
+             "--command", "kubectl apply -f new.yaml", "--revert", "cat {artifact}",
+             "--artifact-name", "cm before.yaml"],
+            stdin_bytes=b"worker_connections: 1024\n",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr.decode())
+        self.assertEqual(res.stdout.decode().strip(), "1")
+        saved = self.project / ".work" / log_id / "001-cm before.yaml"
+        self.assertEqual(saved.read_text(), "worker_connections: 1024\n")
+        plan_lines = [line for line in self.ok("revert-plan", log_id).splitlines()
+                      if line and not line.startswith("#")]
+        out = subprocess.run(["sh", "-c", plan_lines[0]], cwd=self.project, capture_output=True, text=True, check=True)
+        self.assertEqual(out.stdout, "worker_connections: 1024\n")
+
+        before = log.locate(log_id).read_bytes()
+        files_before = sorted(p.name for p in (self.project / ".work" / log_id).iterdir())
+        leak = run_cli(
+            ["add", log_id, "note", "--text", "dumped", "--artifact-name", "dump.env"],
+            stdin_bytes=b"DB_PASSWORD=hunter2hunter2\n",
+        )
+        self.assertEqual(leak.returncode, 2)
+        self.assertEqual(log.locate(log_id).read_bytes(), before)
+        self.assertEqual(sorted(p.name for p in (self.project / ".work" / log_id).iterdir()), files_before)
+
+        for bad_name in ("../escape.txt", "sub/file.txt", ".", "..", "a\nb.txt",
+                         "ghp_abcdefghijklmnopqrstuvwxyz0123456789.txt"):
+            bad = run_cli(
+                ["add", log_id, "note", "--text", "bad", "--artifact-name", bad_name],
+                stdin_bytes=b"ok\n",
+            )
+            self.assertEqual(bad.returncode, 2, bad_name)
+
+        snap = self.file("both.txt")
+        snap.write_text("ok\n")
+        both = run_cli(
+            ["add", log_id, "note", "--text", "both", "--artifact", str(snap), "--artifact-name", "both.txt"],
+            stdin_bytes=b"ok\n",
+        )
+        self.assertEqual(both.returncode, 2)
+
+        old_stdin = sys.stdin
+        try:
+            class FakeTTY:
+                def isatty(self):
+                    return True
+
+            sys.stdin = FakeTTY()
+            self.assertEqual(self.run_log("add", log_id, "note", "--text", "tty", "--artifact-name", "tty.txt")[0], 2)
+        finally:
+            sys.stdin = old_stdin
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
