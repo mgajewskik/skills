@@ -1,24 +1,24 @@
 ---
 name: work
-description: Work discipline for any task that changes or investigates code, config, or infrastructure. Use when the user asks you to do work (build, fix, change, clean up, debug, review, deploy, investigate), or when work lands in front of you mid-task or in a delegated brief. Casual questions do not need it.
+description: Work discipline for tasks that change or investigate code, config, or infrastructure. Use when the user asks you to build, fix, change, clean up, debug, review, deploy, or investigate, or when work lands mid-task or in a delegated brief. Yield when the user explicitly invokes a dedicated skill (such as /review, /research, /security-audit, /debug, or /plan) or asks purely for that skill's workflow. Casual questions do not need it.
 hooks:
   UserPromptSubmit:
     - hooks:
         - type: command
-          command: "echo 'work is on for this session. When this prompt asks for work, follow the work skill. When it steers the work in a new direction, pick the playbook again. If its content is no longer in your context, load the work skill again first. Ignore this on a casual turn.'"
+          command: "echo 'work is on for this session. When this prompt asks for work, follow the work skill. If the user explicitly invokes another skill, follow that skill instead. When it steers the work in a new direction, pick the playbook again. If its content is no longer in your context, load the work skill again first. Ignore this on a casual turn.'"
   SubagentStart:
-    - matcher: "^(general-purpose|sonnet|claude|Plan)$"
+    - matcher: "^(general-purpose|Explore|Plan|sonnet|opus|haiku|claude)$"
       hooks:
         - type: command
           command: >-
-            echo '{"hookSpecificOutput": {"hookEventName": "SubagentStart", "additionalContext": "The parent session runs the work skill. If your brief is a read-only lookup, research, or review, follow your brief only. If your brief runs a workstream inside the parent playbook, follow the brief and do not start a separate work log. Otherwise, load the work skill and follow the playbook your brief names, or pick the one your brief matches."}}'
+            echo '{"hookSpecificOutput": {"hookEventName": "SubagentStart", "additionalContext": "The parent session runs the work skill. Follow your brief only when it is a read-only lookup, research, review, or a subagent spawned by another skill. If your brief runs a parallel workstream inside the parent playbook, follow the brief and do not start a separate work log. If your brief runs a delegated work playbook unit, load the work skill and follow the named or matched playbook. Never spawn a reviewer subagent from inside a subagent; return your review inputs and work log to the main orchestrator so it spawns the fresh reviewer subagent directly."}}'
 ---
 
 # Work
 
 ## Non-negotiables
 
-The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. For any principle that links to a file below, read its file in full before acting on or citing it; entries without a link are complete as written.
+The Principles section below grounds every trigger. Read a linked principle file in full when its trigger applies to a decision in this task (before acting on or citing it); skip principles whose trigger does not apply, and treat entries without a link as complete as written. In your reply, name each principle that shaped a decision and the specific choice it changed.
 
 **Goal first.** Before the first action, restate the user's goal and the smallest scope (or smallest end state, in Reduce) that meets it, then proceed. Open each delegate brief and the final report with the goal.
 
@@ -29,38 +29,47 @@ The Principles section below grounds every trigger. In your reply, name each pri
 - The user asked for that comment.
 - The code is deliberately unusual and a future reader would otherwise "fix" it: a vendor or platform bug, a protocol quirk, an external constraint, or a workaround whose root fix is out of scope. The comment says why it is this way, what breaks if it changes, and when it can change (an issue, a version, a condition).
 
-`# Load config` or `// increment the retry counter` gets deleted. `# The billing API returns 200 with an error body (issue #123); keep the body check until v3.` stays. Tool directives (shebangs, lint or type suppressions, build tags), license headers, and doc comments the repo's tooling requires are code, not comments. Existing comments outside your change stay; one your change makes false is fixed or deleted. Every Independent review brief lists "no comment outside these two cases" as an anti-criterion.
+`# Load config` or `// increment the retry counter` gets deleted. `# The billing API returns 200 with an error body (issue #123); keep the body check until v3.` stays. Tool directives (shebangs, lint or type suppressions, build tags), license headers, and doc comments the repo's tooling requires are code, not comments. Existing comments outside your change stay; one your change makes false is fixed or deleted. Every code-diff Independent review brief lists "no comment outside these two cases" as an anti-criterion.
 
 ## Authority and review
 
 **Precedence:** Explicit user prohibition > `Guided` mode > Active playbook authority > Non-negotiables > Principles.
 
-**Execution authority and grants.** Code playbooks work locally and offline only: nothing is applied, initialized against a real backend, installed, or deployed; a code change reaches a live system only through Deploy. Ops playbooks run against live systems:
+**Execution authority, reversibility, and grants.** Code playbooks work locally and offline only: nothing is applied, initialized against a real backend, installed onto live targets, or deployed; a code change reaches a live system only through Deploy. Ops playbooks run against live systems.
+
+A change is **reversible** only when an exact prior snapshot is captured and verified, a restore command returns it using access you hold, nothing is lost or sent externally on the way, and a signal confirms the restore. Everything else — `Teardown` destroys, data writes or migrations, secret rotation, revoking access, restarts that drop in-flight work, sending external messages, or any change you are unsure you can restore exactly — is **irreversible**.
 
 - Reversible Ops changes outside production run after logging a `plan --by agent` with a verified revert (and snapshot artifact when needed).
 - Reversible Ops changes in production require a **session grant** — an explicit user statement naming environment, target scope, and allowed change types, logged as a `note` or `decision` before use. Without a grant, log a `plan --by user` and hand over.
-- Irreversible Ops changes and `Teardown` destroys are **always user-executed**, in every environment.
+- Irreversible Ops changes and `Teardown` destroys are **always user-executed** (`--by user`), in every environment.
 
-**Independent review (`Decision: PASS`).** Required after every implementation and wherever a playbook calls for an independent review or verdict. Spawn a fresh, non-author read-only subagent instructed to follow [`playbooks/review.md`](playbooks/review.md) without starting a work log. Give it what was asked, binary criteria, anti-criteria (including "no comment outside the two allowed cases" for code diffs), changed paths or artifact revision and preview, parent claims, and the work log path when one exists — never your own conclusion. Fix every `BLOCKER` and re-review until `Decision: PASS` (or an explicit user waiver); any edit after `PASS` voids the verdict.
+**Independent review (`Decision: PASS`).** Required after every implementation and wherever a playbook calls for an independent review or verdict. Spawn a fresh, non-author read-only subagent instructed to follow [`playbooks/review.md`](playbooks/review.md) without starting a work log. Give it what was asked, binary criteria, anti-criteria (including "no comment outside the two allowed cases" for code diffs), the review surface (changed paths, artifact revision and preview, or completed Ops work-log surface), parent claims, and the work log path when one exists — never your own conclusion. Fix every `BLOCKER` and re-review until `Decision: PASS` (or an explicit user waiver); any edit after `PASS` voids the verdict.
+
+- **Orchestrator-only reviewer spawning:** Only the top-level main session / orchestrator spawns reviewer subagents. No subagent spawned by the orchestrator (an `Auto` unit, a handed-off playbook delegate, or a parallel workstream) ever spawns a reviewer subagent itself; it stops before review and returns its review inputs and work log so the main orchestrator spawns the fresh reviewer subagent directly.
+- **No-subagent runtimes:** When the runtime cannot spawn subagents at all, state that limitation explicitly and report the lower verification level — never self-review as `Decision: PASS`.
 
 ## Playbooks
 
-Match the task to a playbook, open its file, and copy its steps into the todolist verbatim before any task-specific todos (when the runtime has no todolist tool, track the steps through work-log phases and the reply instead). A step you skip stays in the list with `skip: <reason>`.
+Match the task to a playbook, open its file, and copy its numbered step titles into the todolist verbatim before any task-specific todos (when the runtime has no todolist tool, track the steps through work-log phases and the reply instead). A step you skip stays in the list with `skip: <reason>`.
 
-**Pick again** when the user's prompt steers the work in a new direction, when the current playbook reaches its exit evidence or routes onward and the work goes on, and when a delegated brief arrives; a follow-up within the current task keeps its playbook. Name the playbook you leave with its exit evidence or the reason it stopped, then the one you enter, and log the switch as a decision.
+**Calibrate ceremony to risk.** Ops tasks and multi-file or risky Code tasks log every phase and step. Small, reversible, local-only Code edits may keep the `.work/` log lightweight (start, criteria/evidence, review verdict, close) without dropping Goal first, real checks, or independent review.
+
+**Pick again** when the user's prompt steers the work in a new direction, when the current playbook reaches its exit evidence or routes onward and the work goes on, and when a delegated brief arrives; a follow-up within the current task keeps its playbook. Name the playbook you leave with its exit evidence or the reason it stopped, then the one you enter, and log the switch as a decision. (Embedded sub-playbooks such as `Debug` inside `Incident` or `Deploy` inside `Migration` return to the enclosing playbook's next step when done.)
 
 **Delegate with the skill.** Delegation has three shapes:
 
-- **Delegated playbook unit** (e.g., an Auto unit or handed-off task): brief tells the agent to load `work`, names the playbook when known (or leaves the agent to pick), passes the parent log id for `new --parent`, and gets back the delegate's log id and evidence.
-- **Parallel workstream** (inside Implement): edits only its disjoint file scope, runs scoped checks, keeps no separate work log, and returns changed paths and evidence to the parent.
+- **Delegated playbook unit** (e.g., an Auto unit or handed-off task): brief opens with the goal, tells the agent to load `work`, names the playbook when known (or leaves the agent to pick), passes the parent log id for `new --parent` when in the same project, states that the main orchestrator owns spawning independent review (the delegate never spawns a reviewer subagent), and gets back the delegate's log id, review inputs, and evidence.
+- **Parallel workstream** (inside Implement): brief opens with the goal and includes the two-case comment rule; the workstream edits only its disjoint file scope, runs scoped checks, keeps no separate work log, and returns changed paths and evidence to the parent.
 - **Read-only lookup or independent review:** runs on its own brief (following [`playbooks/review.md`](playbooks/review.md) for reviews); does not load other `work` playbooks or start a work log.
 
 Code is everything kept in version-controlled files: application code, tests, scripts, config, and infrastructure as code (manifests, roles, unit files, pipelines). Ops are operations run against live systems by executing commands. A question about a live system's current behavior is Debug; an adversarial diff/branch/PR review is Review; a general read-only audit or exploration of local code is Investigate. A mixed task ("fix the Terraform module and roll it out") starts where the failure is observed and hands over at the boundary, naming the exit evidence.
 
+*(Note: frontmatter `hooks:` is a Claude Code runtime extension; other runtimes ignore it and follow the same rules via explicit loading and briefs.)*
+
 **Code**
 
 - **Investigate.** Read-only audit, exploration, or analysis of code, config, or infrastructure as code; changes nothing. [`investigate.md`](playbooks/investigate.md).
-- **Review.** Adversarial, read-only PASS-gate review of a diff, implementation, or prepared rollout across configured checks, Spec, Standards, and work-log claims; runs in a fresh context after every implementation. [`review.md`](playbooks/review.md).
+- **Review.** Adversarial, read-only PASS-gate review of a diff, implementation, prepared rollout, or Ops execution surface across configured checks, Spec, Standards, and work-log claims; runs in a fresh context after every implementation. [`review.md`](playbooks/review.md).
 - **Implement.** Build or change code and verify it offline. [`implement.md`](playbooks/implement.md).
 - **Fix.** A defect in code: make it red with a check, fix the root cause, keep the check as a regression guard. [`fix.md`](playbooks/fix.md).
 - **Reduce.** Make code smaller and simpler while keeping current behavior or reaching a target behavior the user states: cleanup, deleting what is no longer needed, cutting complexity. [`reduce.md`](playbooks/reduce.md).
@@ -77,33 +86,35 @@ Code is everything kept in version-controlled files: application code, tests, sc
 
 **Mode**
 
+Modes wrap a matched playbook. `Guided` and `Auto` are mutually exclusive; `Guided` and `TDD` may combine when the user runs edits and tests step by step.
+
 - **Guided.** The user runs every live command and makes every edit; you guide from their pasted output (offline local reads and checks only, or zero execution if the user forbids running commands). Wraps the matched playbook. [`guided.md`](playbooks/guided.md).
 - **TDD.** Build test-first in vertical slices at agreed seams. Wraps Implement. Use only when the user asks for TDD, test-first, or red-green. [`tdd.md`](playbooks/tdd.md).
-- **Auto.** Pursue one stated goal to completion as an orchestrator: fresh subagents run its units, each on the playbook it matches, chaining playbooks until the goal is met or only handovers remain. Wraps a sequence of playbooks. Use when the user asks for auto mode, orchestration, or a long run toward a goal. [`auto.md`](playbooks/auto.md).
+- **Auto.** Pursue one stated goal to completion as an orchestrator: fresh subagents run its units on their matched playbooks while the orchestrator dispatches fresh reviewer subagents directly, chaining until the goal is met or only handovers remain. Wraps a sequence of playbooks. Use when the user asks for auto mode, orchestration, or a long run toward a goal. [`auto.md`](playbooks/auto.md).
 
 ## Work log
 
-Every mutating or Ops task keeps one log, continued across the playbooks it chains through. Skip creating a `.work/` log on strictly read-only `Investigate` tasks when the user asks for no workspace writes; `Review` never creates a `.work/` log. A delegate running its own playbook keeps its own log (`--parent <id>` when in the same project, so it nests inside the parent's directory) and hands back its id and path; a workstream inside the parent's playbook hands its evidence back for the parent's log. Each log has one writer. It is the audit record the user reads weeks later, without running a command, to see what changed, why, on what evidence, how it was verified, and how to undo it; whatever the environment will lose by then must be in it.
+Every mutating Code or Ops task keeps one log, continued across the playbooks it chains through. Read-only `Investigate` and `Review` tasks do not create a `.work/` log (unless the user explicitly asks to log an audit). A delegate running its own playbook keeps its own log (`--parent <id>` when in the same project, nesting inside the parent's directory) and hands back its id and path; a parallel workstream hands its evidence back for the parent's log. Each log has one writer and is the audit record the user reads weeks later without running a command.
 
 Write logs only through `uv run <this skill's directory>/scripts/log.py` from inside the project (`--help` lists every subcommand and flag); each log is `.work/<id>/log.yml` plus entry-numbered artifacts, excluded from git. Calls to `log.py` itself and bounded bootstrap reads before `new` are not logged.
 
-- **Start / phase:** `new <kebab-slug> --task "<one sentence>" --playbook <name> [--parent <id>]`, then `phase <id> "<step>"` at each step.
-- **Changes (plan before, run after):** Before executing any change (agent or user), log `add <id> plan --by agent|user --class reversible|irreversible --command ... --why ... --revert ...` (or `--no-revert "<reason>"` for irreversible; attach prior state via `--artifact /tmp/<file>` and write `{artifact}` in `--revert`). After execution, log `add <id> run --from-plan <n> --outcome ok|failed|unknown --result ...`. A revert you or the user ran is `add <id> run --class ... --command ... --reverts <n> --outcome ok|failed|unknown`; only `--outcome ok` clears the original entry from `revert-plan`.
-- **Read-only commands:** Log `add <id> run --class read-only --command ... --target ... --identity ... --why ... --result ...` after execution.
-- **Evidence, decisions, notes, corrections:** Log `add <id> evidence --claim ... --status established|failed|unverified --command ... [--revision ...]`, `decision --text ... --why ... [--evidence <n,n>] [--rejected ...]`, `note --text ...`. Attach large outputs or snapshots via `--artifact /tmp/<file>`. Fix mistakes append-only with `--supersedes <n>`; never edit `log.yml` by hand.
-- **Root cause, gate, revert, close:** `root-cause <id> ...`, `check <id> --since <n> --max-age-hours <h> --revision <rev> --require <claim> ...`, `revert-plan <id>` (prints newest first including nested delegate logs; never executes), and `close <id> --status done|halted|reverted --summary ...` after walking the timeline for missing decisions or wrong entries.
+- **Start / phase:** `new <kebab-slug> --task "<one sentence>" --playbook <name> [--parent <id>]`; `phase <id> "<step>"` at each step (may be omitted for trivial skipped steps on small local Code edits).
+- **Ops changes (plan before, run after):** Before any live change (agent or user), log `add <id> plan --by agent|user --class read-only|reversible|irreversible --command ... --why ... --revert ...` (irreversible always requires `--by user`, with `--revert` or `--no-revert "<reason>"`; attach snapshots via `--artifact /tmp/<file>` and write `{artifact}` in `--revert`). After execution, log `add <id> run --from-plan <n> [--by user] --outcome ok|failed|unknown --result ...`. Reverts are logged once run via `add <id> run --class reversible|irreversible --command ... --reverts <n> --outcome ok|failed|unknown` (never pre-planned with `plan`); only `--outcome ok` clears the original entry from `revert-plan`.
+- **Ops read-only commands:** Log `add <id> run --class read-only --command ... --target ... --identity ... --why ... --result ...` after execution (local Code inspection commands do not need `run` entries).
+- **Evidence, decisions, notes, corrections:** `add <id> evidence --claim ... --status established|failed|unverified --command ... [--revision ...]`, `decision --text ... --why ... [--evidence <n,n>] [--rejected ...]`, `note --text ...`. Attach large outputs or snapshots via `--artifact /tmp/<file>`. Fix mistakes append-only with `--supersedes <n>`; never edit `log.yml` by hand.
+- **Root cause, gate, revert, close:** `root-cause <id> --summary ... --confidence established|leading-hypothesis|unknown [--evidence <n,n>]`, `check <id> --since <n> --max-age-hours <h> --revision <rev> --require <claim> ...`, `revert-plan <id>` (newest first including nested delegates; never executes), and `close <id> --status done|halted|reverted --summary ...` (closed logs reject further writes).
 
-Write entries in plain words and concrete actions. A refused value looks like a secret: redact it and log again. Name the log path in the reply when a log was used.
+Write entries in plain words and concrete actions. A refused value looks like a secret: redact it (e.g., `REDACTED`) and log again. Name the log path in the reply when a log was used.
 
 ## Principles
 
-Each principle names when it applies. Read a linked file in full before acting on or citing it; entries without a link are complete as written. Paths are relative to this skill's directory.
+Each principle names its trigger. Load a linked file only when its trigger applies to a decision in this task; paths are relative to this skill's directory.
 
 **Core**
 
 - **Laziness Protocol.** Refactoring, sizing a diff, or tempted to add abstractions, layers, or signal threading. Bias to deletion and the smallest change that solves the problem; consolidate each repeated decision into one source of truth.
 - **Foundational Thinking** ([`foundational-thinking.md`](principles/foundational-thinking.md)). Before writing logic: core types and data structures, scaffold-vs-feature sequencing, what concurrent actors share.
-- **Redesign from First Principles** ([`redesign-from-first-principles.md`](principles/redesign-from-first-principles.md)). Integrating a new requirement into an existing design. Redesign as if it had been foundational from day one.
+- **Redesign from First Principles** ([`redesign-from-first-principles.md`](principles/redesign-from-first-principles.md)). Integrating a new requirement into an existing design (base design requirement in Implement). Redesign cleanly as if it had been foundational from day one instead of bolting on patches, while staying inside the requested scope.
 - **Attack the Premise** ([`attack-the-premise.md`](principles/attack-the-premise.md)). Two or more fixes that share one premise have failed the same gate. Write the premise down and test it directly before you write another fix that assumes it.
 - **Subtract Before You Add** ([`subtract-before-you-add.md`](principles/subtract-before-you-add.md)). Sequencing an addition, refactor, or rewrite. Remove dead weight first, then build on the simpler base.
 - **Minimize Reader Load** ([`minimize-reader-load.md`](principles/minimize-reader-load.md)). Reviewing or shaping code that's hard to trace. Count layers and hidden state, collapse one-caller wrappers, shrink mutable scope.

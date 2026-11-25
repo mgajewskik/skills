@@ -18,21 +18,24 @@ check ID [--since N] [--max-age-hours H] [--revision REV] [--require CLAIM ...]
 revert-plan ID                         newest first, how to undo each change not yet reverted (includes
                                        nested delegate logs)
 
-Every reversible change, run or planned, carries --revert; an irreversible one carries --revert or
---no-revert. Log a change as a plan before execution, then as a run with --from-plan N and --outcome
-ok|failed|unknown after execution. An --artifact is copied beside log.yml as NNN-NAME and substituted
-for {artifact} as a shell-quoted relative path. A wrong entry is corrected by a new one with
---supersedes N; the file is never edited. Values and text artifacts that look like secrets are refused.
+Every reversible change, run or planned, carries --revert; an irreversible one is user-executed
+(--by user) and carries --revert or --no-revert. Log an Ops change as a plan before execution, then
+as a run with --from-plan N and --outcome ok|failed|unknown after execution. An --artifact is copied
+beside log.yml as NNN-NAME and substituted for {artifact} as a shell-quoted relative path. A wrong
+entry is corrected by a new one with --supersedes N; the file is never edited. Values and text
+artifacts that look like secrets are refused.
 """
 
 import argparse
 import datetime
+import math
 import os
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -48,48 +51,138 @@ EVIDENCE_STATUSES = ("established", "failed", "unverified")
 CONFIDENCE = ("established", "leading-hypothesis", "unknown")
 LOG_STATUSES = ("open", "done", "halted", "reverted")
 
-SECRET_SHAPES = re.compile(
-    r"AKIA[0-9A-Z]{16}"
-    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
+ALLOWED_FIELDS = {
+    "run": frozenset({
+        "command", "class", "by", "why", "target", "identity", "outcome",
+        "revert", "no_revert", "result", "from_plan", "reverts", "supersedes", "artifact",
+    }),
+    "plan": frozenset({
+        "command", "class", "by", "why", "target", "identity",
+        "revert", "no_revert", "supersedes", "artifact",
+    }),
+    "evidence": frozenset({
+        "claim", "status", "command", "why", "target", "identity",
+        "revision", "result", "supersedes", "artifact",
+    }),
+    "decision": frozenset({"text", "why", "evidence", "rejected", "supersedes", "artifact"}),
+    "note": frozenset({"text", "why", "supersedes", "artifact"}),
+}
+ALL_OPTIONAL_FIELDS = tuple(sorted(frozenset().union(*ALLOWED_FIELDS.values())))
+
+REDACTED_VALUE = re.compile(
+    r"^(?:"
+    r"\[?REDACTED\]?"
+    r"|<[^>\s]+>"
+    r"|\*{3,}"
+    r"|\.{3,}"
+    r"|x{4,}"
+    r"|changeme|placeholder|example|dummy|sample|redacted|omitted|masked|hidden|scrubbed|removed"
+    r")$",
+    re.IGNORECASE,
+)
+
+PLAIN_VALUE = re.compile(
+    r"^(?:true|false|yes|no|null|none|empty|unset|missing|expired|invalid|revoked|rotated"
+    r"|required|optional|strict|enabled|disabled|interactive|default|[0-9]{1,5})$",
+    re.IGNORECASE,
+)
+
+SECRET_SHAPES_SENSITIVE = re.compile(
+    r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"
+    r"|-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----"
     r"|\bgh[pousr]_[A-Za-z0-9]{20,}"
     r"|\bgithub_pat_[A-Za-z0-9_]{20,}"
     r"|\bglpat-[A-Za-z0-9_-]{20,}"
     r"|\bxox[abposr]-[A-Za-z0-9-]{10,}"
     r"|\bsk-[A-Za-z0-9_-]{20,}"
+    r"|\bAIza[0-9A-Za-z_-]{35}\b"
+    r"|\bnpm_[A-Za-z0-9]{20,}\b"
+    r"|\bpypi-[A-Za-z0-9_-]{20,}\b"
+    r"|\bAGE-SECRET-KEY-1[0-9A-Z]{20,}\b"
     r"|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
-    r"|\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}"
-    r"|://[^/\s:@]+:(?![$<{*])[^@\s/]+@"
-    r"|--[a-z-]*(password|passwd|token|secret|api-key)[= ]+[\"']?(?![$<{*\"'])\S",
+)
+
+BEARER_OR_BASIC_SECRET = re.compile(
+    r"\bBearer[ \t]+((?=[A-Za-z0-9._~+/=-]*(?:[0-9._~+/=-]|[a-z][A-Z]))[A-Za-z0-9._~+/=-]{8,})"
+    r"|\bBasic[ \t]+((?=[A-Za-z0-9+/=]*(?:[0-9+/=]|[a-z][A-Z]))[A-Za-z0-9+/=]{12,})"
+)
+
+AUTH_HEADER_SECRET = re.compile(
+    r"\bAuthorization[ \t]*:[ \t]*(?:Bearer|Basic|Token|ApiKey)[ \t]+([^\s'\",;]{8,})",
     re.IGNORECASE,
 )
+
+URL_CREDENTIAL_SECRET = re.compile(r"://[^/\s:@]+:(?![$<{*])([^@\s/]+)@")
+
+CLI_FLAG_SECRET = re.compile(
+    r"(?:^|[\s'\"])--[a-z-]*(?:password|passwd|token|secret|api-key)[= ]+(?:[\"']([^\"'\n]+)[\"']|([^\s\"']+))"
+    r"|\b(?:curl|wget)\b[^\n;|&]*?\s(?:-u|--user)[= ]+[\"']?[^:\s\"']+:([^@\s\"']+)",
+    re.IGNORECASE,
+)
+
 SECRET_ASSIGNMENT = re.compile(
     r"(?<![A-Za-z0-9_.-])"
-    r"([A-Za-z0-9_.-]{0,64}(?:password|passwd|_pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key)"
-    r"[A-Za-z0-9_.-]{0,64})"
-    r"[\"']?[ \t]*[=:][ \t]*[\"']?(?![$<{*\[\"'])([^\s,\"'}\]]+)",
+    r"([A-Za-z0-9_.-]{0,64}(?:password|passwd|_pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key"
+    r"|(?:tls|ssl|ssh|signing|client|server|host|ca|gpg|pgp|age)\.key)[A-Za-z0-9_.-]{0,64})"
+    r"[\"']?[ \t]*[=:][ \t]*(?:[\"']([^\"'\n]+)[\"']|(?![$<{*\[\"'])([^\s,\"'}\]]+))",
     re.IGNORECASE,
 )
+
 REFERENCE_KEY = re.compile(
-    r"(name|ref|path|file|id|type|length|ttl|expiry|expires|count|tokens|secrets|limit|size|seconds|timeout"
-    r"|version|enabled)$",
+    r"(?:name|ref|path|file|id|type|length|ttl|expiry|expires|count|tokens|secrets|limit|size|seconds|timeout"
+    r"|version|enabled|policy|store|header|prompt|env|var|endpoint|url|uri|host|domain|issuer|audience"
+    r"|scope|scopes|alg|algorithm|format|mode|provider|source|backend|scheme|status|state|error|message"
+    r"|hint|label|field|param|arg|flag|option|rotation|lifetime|window|cache|dir|folder|prefix|suffix"
+    r"|pattern|regex|check|rule|metric|quota|budget)$",
     re.IGNORECASE,
 )
-PLAIN_VALUE = re.compile(r"(true|false|yes|no|null|none|[0-9]{1,5})$", re.IGNORECASE)
 
 
 class LogError(Exception):
     pass
 
 
-def looks_secret(text):
-    if SECRET_SHAPES.search(text):
+def is_placeholder_value(value):
+    stripped = value.strip()
+    if not stripped or stripped[0] in "$<{*":
         return True
-    return any(not REFERENCE_KEY.search(m.group(1)) and not PLAIN_VALUE.match(m.group(2))
-               for m in SECRET_ASSIGNMENT.finditer(text))
+    return bool(REDACTED_VALUE.match(stripped))
+
+
+def looks_secret(text):
+    if SECRET_SHAPES_SENSITIVE.search(text):
+        return True
+    if any(not is_placeholder_value(m.group(1) or m.group(2) or "") for m in BEARER_OR_BASIC_SECRET.finditer(text)):
+        return True
+    if any(not is_placeholder_value(m.group(1)) for m in AUTH_HEADER_SECRET.finditer(text)):
+        return True
+    if any(not is_placeholder_value(m.group(1)) for m in URL_CREDENTIAL_SECRET.finditer(text)):
+        return True
+    for match in CLI_FLAG_SECRET.finditer(text):
+        value = match.group(1) or match.group(2) or match.group(3) or ""
+        if not is_placeholder_value(value):
+            return True
+    for match in SECRET_ASSIGNMENT.finditer(text):
+        key = match.group(1)
+        value = (match.group(2) or match.group(3) or "").strip()
+        if REFERENCE_KEY.search(key) or is_placeholder_value(value) or PLAIN_VALUE.match(value):
+            continue
+        return True
+    return False
 
 
 def now():
     return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def parse_timestamp(value):
+    try:
+        dt = datetime.datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise LogError(f"invalid timestamp in log: {value!r}") from None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.datetime.now().astimezone().tzinfo)
+    return dt.astimezone(datetime.timezone.utc)
 
 
 def literal_blocks(dumper, value):
@@ -100,21 +193,29 @@ def literal_blocks(dumper, value):
 yaml.SafeDumper.add_representer(str, literal_blocks)
 
 
-def project_root():
+def project_root(for_locate=False):
     cwd = Path.cwd().resolve()
+    home = Path.home().resolve()
     try:
         top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
                              check=True).stdout.strip()
-        root = Path(top)
+        root = Path(top).resolve()
     except (OSError, subprocess.CalledProcessError):
         root = cwd
-    if root in (Path.home().resolve(), Path("/")):
+        if for_locate:
+            for candidate in (cwd, *cwd.parents):
+                if candidate in (home, Path("/")):
+                    break
+                work_dir = candidate / WORK_DIR
+                if work_dir.exists() and not work_dir.is_symlink() and work_dir.is_dir():
+                    root = candidate
+                    break
+    if root in (home, Path("/")):
         raise LogError(f"{root} is not a project directory; run from inside the project")
     return root
 
 
 def exclude_from_git(root):
-    """Add .work/ to the repository's local exclude file when not already ignored."""
     try:
         ignored = subprocess.run(["git", "-C", str(root), "check-ignore", "-q", f"{WORK_DIR}/"],
                                  capture_output=True)
@@ -130,11 +231,12 @@ def exclude_from_git(root):
     exclude = Path(exclude) if Path(exclude).is_absolute() else root / exclude
     pattern = f"/{WORK_DIR}/"
     try:
-        lines = exclude.read_text().splitlines() if exclude.exists() else []
-        if pattern not in lines:
+        text = exclude.read_text() if exclude.exists() else ""
+        if pattern not in text.splitlines():
             exclude.parent.mkdir(parents=True, exist_ok=True)
+            prefix = "\n" if text and not text.endswith("\n") else ""
             with exclude.open("a") as handle:
-                handle.write(("\n" if lines and lines[-1] else "") + pattern + "\n")
+                handle.write(f"{prefix}{pattern}\n")
     except OSError as error:
         raise LogError(f"cannot exclude {WORK_DIR}/ from git ({exclude}): {error}") from None
 
@@ -146,8 +248,8 @@ def validate_log_id(log_id):
     return log_id
 
 
-def work_root_dir(root=None):
-    base = (root or project_root()).resolve()
+def work_root_dir(root=None, for_locate=False):
+    base = (root or project_root(for_locate=for_locate)).resolve()
     work_root = base / WORK_DIR
     if work_root.is_symlink():
         raise LogError(f"{work_root} must not be a symlink")
@@ -156,7 +258,7 @@ def work_root_dir(root=None):
 
 def locate(log_id):
     validate_log_id(log_id)
-    work_root = work_root_dir()
+    work_root = work_root_dir(for_locate=True)
     path = (work_root / log_id / "log.yml").resolve()
     if not path.is_relative_to(work_root) or not path.is_file():
         raise LogError(f"no log {log_id!r} under {work_root}")
@@ -164,10 +266,19 @@ def locate(log_id):
 
 
 def load(path):
-    doc = yaml.safe_load(path.read_text())
-    if not isinstance(doc, dict) or "timeline" not in doc:
+    try:
+        doc = yaml.safe_load(path.read_text())
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
+        raise LogError(f"cannot read {path}: {error}") from None
+    if not isinstance(doc, dict) or not isinstance(doc.get("timeline"), list):
         raise LogError(f"{path} is not a work log")
     return doc
+
+
+def ensure_open(doc, log_id):
+    status = doc.get("status", "open")
+    if status != "open":
+        raise LogError(f"log {log_id!r} is closed ({status}); start a new log instead")
 
 
 def clean(name, value):
@@ -234,25 +345,55 @@ def render(doc):
 def save(path, doc):
     doc["updated"] = now()
     doc["revert"] = revert_view(doc["timeline"])
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(render(doc))
-    os.replace(tmp, path)
+    rendered = render(doc)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+        ) as handle:
+            tmp_path = Path(handle.name)
+            handle.write(rendered)
+        os.replace(tmp_path, path)
+    except OSError as error:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        raise LogError(f"cannot write {path}: {error}") from None
+
+
+def file_looks_secret(source):
+    chunk_size = 1024 * 1024
+    overlap = 4096
+    tail = ""
+    try:
+        with source.open("rb") as handle:
+            while True:
+                raw = handle.read(chunk_size)
+                if not raw:
+                    break
+                text = tail + raw.decode("utf-8", errors="replace")
+                if looks_secret(text):
+                    return True
+                tail = text[-overlap:]
+    except OSError as error:
+        raise LogError(f"cannot read artifact {source}: {error}") from None
+    return False
 
 
 def save_artifact(path, source, n):
-    """Copy an artifact beside the log as NNN-NAME, NNN being the number of the entry it belongs to."""
     source = Path(source)
     if not source.is_file():
         raise LogError(f"artifact {source} is not a file")
-    if looks_secret(source.read_text(errors="replace")):
+    if looks_secret(source.name) or file_looks_secret(source):
         raise LogError(f"artifact {source} looks like it contains a secret; redact it and try again")
     name = f"{n:03d}-{source.name}"
-    shutil.copy2(source, path.parent / name)
+    try:
+        shutil.copy2(source, path.parent / name)
+    except (OSError, shutil.SameFileError) as error:
+        raise LogError(f"cannot save artifact {source}: {error}") from None
     return name
 
 
 def entry_numbers(text, timeline):
-    """Parse comma-separated entry numbers, each of which must exist."""
     try:
         numbers = [int(n) for n in text.split(",")]
     except ValueError:
@@ -263,32 +404,53 @@ def entry_numbers(text, timeline):
     return numbers
 
 
+def replace_artifact_placeholder(text, quoted_path):
+    for token in (f'"{ARTIFACT_PLACEHOLDER}"', f"'{ARTIFACT_PLACEHOLDER}'", ARTIFACT_PLACEHOLDER):
+        text = text.replace(token, quoted_path)
+    return text
+
+
 def cmd_new(args):
     if not SLUG.match(args.slug):
         raise LogError("slug must be kebab-case, such as fix-nginx-502")
-    root = project_root()
+    if looks_secret(args.slug):
+        raise LogError("slug looks like it contains a secret; redact it and try again")
+    root = project_root(for_locate=bool(args.parent))
     work = work_root_dir(root)
     base = f"{datetime.date.today().isoformat()}-{args.slug}"
     if args.parent:
-        locate(args.parent)
+        parent_path = locate(args.parent)
+        ensure_open(load(parent_path), args.parent)
         base = f"{args.parent}/{base}"
-    log_id, number = base, 2
-    while (work / log_id).exists():
-        log_id = f"{base}-{number}"
-        number += 1
-    doc = {"id": log_id, "task": clean("task", args.task), "playbook": clean("playbook", args.playbook),
+    doc = {"id": base, "task": clean("task", args.task), "playbook": clean("playbook", args.playbook),
            "status": "open", "created": now(), "root_cause": None, "timeline": []}
     if args.parent:
         doc["parent"] = args.parent
     exclude_from_git(root)
-    (work / log_id).mkdir(parents=True)
-    save(work / log_id / "log.yml", doc)
+    log_id, number = base, 2
+    while True:
+        target_dir = work / log_id
+        try:
+            target_dir.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            log_id = f"{base}-{number}"
+            number += 1
+        except OSError as error:
+            raise LogError(f"cannot create {target_dir}: {error}") from None
+    doc["id"] = log_id
+    try:
+        save(target_dir / "log.yml", doc)
+    except Exception:
+        shutil.rmtree(target_dir, ignore_errors=True)
+        raise
     print(log_id)
 
 
 def cmd_phase(args):
     path = locate(args.id)
     doc = load(path)
+    ensure_open(doc, args.id)
     doc["timeline"].append({"n": len(doc["timeline"]) + 1, "at": now(), "kind": "phase",
                             "name": clean("name", args.name)})
     save(path, doc)
@@ -298,9 +460,32 @@ def cmd_phase(args):
 def cmd_add(args):
     path = locate(args.id)
     doc = load(path)
+    ensure_open(doc, args.id)
     timeline = doc["timeline"]
+    if args.outcome is not None and args.kind != "run":
+        raise LogError("--outcome goes on run entries")
+    if args.from_plan is not None and args.kind != "run":
+        raise LogError("--from-plan goes on the run that executed the plan")
+    if args.reverts is not None and args.kind != "run":
+        raise LogError("--reverts goes on the run that executed the revert")
+    if args.from_plan is not None and args.reverts is not None:
+        raise LogError("--from-plan and --reverts cannot be combined on one entry")
+
+    allowed = ALLOWED_FIELDS[args.kind]
+    for field in ALL_OPTIONAL_FIELDS:
+        if getattr(args, field, None) is not None and field not in allowed:
+            raise LogError(f"--{field.replace('_', '-')} is not allowed on {args.kind} entries")
+
     entry = {"n": len(timeline) + 1, "at": now(), "kind": args.kind}
-    phase = next((e["name"] for e in reversed(timeline) if e["kind"] == "phase"), None)
+    if args.supersedes is not None:
+        if args.supersedes not in {e["n"] for e in timeline}:
+            raise LogError(f"entry {args.supersedes} does not exist")
+        entry["supersedes"] = args.supersedes
+    effective_superseded = superseded_numbers(timeline, args.supersedes)
+    phase = next(
+        (e["name"] for e in reversed(timeline) if e["kind"] == "phase" and e["n"] not in effective_superseded),
+        None,
+    )
     if phase:
         entry["phase"] = phase
     for field in ("text", "why", "target", "identity", "class", "by", "outcome", "claim", "status", "revision",
@@ -308,20 +493,9 @@ def cmd_add(args):
         value = getattr(args, field, None)
         if value is not None:
             entry[field] = clean(field.replace("_", "-"), value)
-    if "outcome" in entry and args.kind != "run":
-        raise LogError("--outcome goes on run entries")
     if args.evidence is not None:
         entry["evidence"] = entry_numbers(args.evidence, timeline)
-    if args.from_plan is not None and args.reverts is not None:
-        raise LogError("--from-plan and --reverts cannot be combined on one entry")
-    if args.supersedes is not None:
-        if args.supersedes not in {e["n"] for e in timeline}:
-            raise LogError(f"entry {args.supersedes} does not exist")
-        entry["supersedes"] = args.supersedes
-    effective_superseded = superseded_numbers(timeline, args.supersedes)
     if args.from_plan is not None:
-        if args.kind != "run":
-            raise LogError("--from-plan goes on the run that executed the plan")
         plan = next((e for e in timeline if e["n"] == args.from_plan and e["kind"] == "plan"), None)
         settled = {e.get("from_plan") for e in timeline if e["n"] not in effective_superseded} | {
             e.get("reverts") for e in timeline
@@ -344,12 +518,24 @@ def cmd_add(args):
     missing = [f"--{f}" for f in required if f not in entry]
     if missing:
         raise LogError(f"{args.kind} needs {', '.join(missing)}")
+    if "revert" in entry and "no_revert" in entry:
+        raise LogError("--revert and --no-revert cannot be combined")
+    if entry.get("class") == "read-only" and ("revert" in entry or "no_revert" in entry):
+        raise LogError("read-only entries cannot carry --revert or --no-revert")
+    if entry.get("class") == "irreversible" and entry.get("by") != "user":
+        raise LogError("irreversible changes are always user-executed; pass --by user")
     if args.reverts is not None:
-        if args.kind != "run":
-            raise LogError("--reverts goes on the run that executed the revert")
+        if "revert" in entry or "no_revert" in entry:
+            raise LogError("--reverts cannot be combined with --revert or --no-revert")
+        if entry.get("class") == "read-only":
+            raise LogError("a revert run must use --class reversible or irreversible")
         active_reverts = revert_view(timeline, extra_superseded=args.supersedes)
-        if args.reverts not in {item["of"] for item in active_reverts if "command" in item}:
-            raise LogError(f"entry {args.reverts} is not in the revert list")
+        revertable = {
+            item["of"] for item in active_reverts
+            if "command" in item and not item["state"].startswith("planned")
+        }
+        if args.reverts not in revertable:
+            raise LogError(f"entry {args.reverts} is not an executed change in the revert list")
         entry["reverts"] = args.reverts
     elif entry.get("class") == "reversible" and "revert" not in entry:
         raise LogError("a reversible change needs --revert")
@@ -359,13 +545,14 @@ def cmd_add(args):
     if uses_artifact and not args.artifact:
         raise LogError(f"{ARTIFACT_PLACEHOLDER} needs --artifact")
     if args.artifact:
+        root = project_root(for_locate=True)
         name = save_artifact(path, args.artifact, entry["n"])
         entry["artifact"] = name
         doc.setdefault("artifacts", []).append(name)
-        relative = shlex.quote(os.path.relpath(path.parent / name, project_root()))
+        relative = shlex.quote(os.path.relpath(path.parent / name, root))
         for field in ("command", "revert"):
             if field in entry:
-                entry[field] = entry[field].replace(ARTIFACT_PLACEHOLDER, relative)
+                entry[field] = replace_artifact_placeholder(entry[field], relative)
     timeline.append(entry)
     save(path, doc)
     print(entry["n"])
@@ -374,6 +561,7 @@ def cmd_add(args):
 def cmd_root_cause(args):
     path = locate(args.id)
     doc = load(path)
+    ensure_open(doc, args.id)
     evidence = entry_numbers(args.evidence, doc["timeline"]) if args.evidence else []
     doc["root_cause"] = {"summary": clean("summary", args.summary), "confidence": args.confidence,
                          "evidence": evidence}
@@ -383,6 +571,7 @@ def cmd_root_cause(args):
 def cmd_close(args):
     path = locate(args.id)
     doc = load(path)
+    ensure_open(doc, args.id)
     doc["status"] = args.status
     doc["summary"] = clean("summary", args.summary)
     save(path, doc)
@@ -397,12 +586,19 @@ def cmd_check(args):
             latest[entry["claim"]] = entry
     required_claims = [clean("require", claim) for claim in (args.require or [])]
     expected_revision = clean("revision", args.revision) if args.revision is not None else None
+    if args.max_age_hours is not None and (not math.isfinite(args.max_age_hours) or args.max_age_hours < 0):
+        raise LogError("--max-age-hours must be a finite number >= 0")
     if not latest and not required_claims:
         print("no claims recorded")
         return 1
     cutoff = None
     if args.max_age_hours is not None:
-        cutoff = datetime.datetime.now().astimezone() - datetime.timedelta(hours=args.max_age_hours)
+        try:
+            cutoff = datetime.datetime.now().astimezone(datetime.timezone.utc) - datetime.timedelta(
+                hours=args.max_age_hours
+            )
+        except OverflowError:
+            raise LogError("--max-age-hours is out of range") from None
     passed = True
     for claim, entry in latest.items():
         status = entry["status"]
@@ -410,8 +606,11 @@ def cmd_check(args):
         if expected_revision is not None and entry.get("revision") != expected_revision:
             status = "wrong-rev"
             detail = f" (got {entry.get('revision', 'none')}, want {expected_revision})"
-        elif cutoff and datetime.datetime.fromisoformat(entry["at"]) < cutoff:
-            status = "stale"
+        elif cutoff is not None:
+            entry_at = parse_timestamp(entry.get("at"))
+            stale = entry_at <= cutoff if args.max_age_hours == 0 else entry_at < cutoff
+            if stale:
+                status = "stale"
         passed = passed and status == "established"
         print(f"{status:12} #{entry['n']:<4} {claim}{detail}")
     for claim in required_claims:
@@ -421,66 +620,86 @@ def cmd_check(args):
     return 0 if passed else 1
 
 
-def latest_revert_timestamp(doc, plan):
+def collect_revert_records(doc, source_id):
+    plan = revert_view(doc["timeline"])
     by_n = {e["n"]: e for e in doc["timeline"]}
-    timestamps = [by_n[item["of"]]["at"] for item in plan if item["of"] in by_n and "at" in by_n[item["of"]]]
-    if timestamps:
-        return max(timestamps)
-    return doc.get("updated") or doc.get("created") or ""
+    fallback = doc.get("updated") or doc.get("created") or ""
+    records = []
+    for item in plan:
+        raw_ts = by_n.get(item["of"], {}).get("at") or fallback
+        ts = parse_timestamp(raw_ts) if raw_ts else datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+        records.append((ts, item["of"], source_id, item))
+    return records
 
 
-def print_revert_section(plan):
-    executed = [item for item in plan if item["state"] == "executed"]
-    uncertain = [item for item in plan if item["state"] in ("outcome unknown", "failed")]
-    planned = [item for item in plan if item["state"].startswith("planned")]
-    for item in executed:
-        print_revert(item, live=True)
-    if uncertain:
-        print("# --- failed or outcome unknown: check live state before reverting ---\n")
-    for item in uncertain:
-        print_revert(item, live=False)
-    if planned:
-        print("# --- planned, not known to have run: uncomment only for a change you ran ---\n")
-    for item in planned:
-        print_revert(item, live=False)
-
-
-def cmd_revert_plan(args):
-    parent_path = locate(args.id)
-    work_root = work_root_dir()
-    parent_plan = revert_view(load(parent_path)["timeline"])
-    child_plans = []
-    for child_path in parent_path.parent.rglob("log.yml"):
-        if child_path == parent_path:
-            continue
-        resolved = child_path.resolve()
-        if not resolved.is_relative_to(work_root):
-            continue
-        child_doc = load(resolved)
-        plan = revert_view(child_doc["timeline"])
-        if plan:
-            child_id = resolved.parent.relative_to(work_root).as_posix()
-            child_plans.append((latest_revert_timestamp(child_doc, plan), child_id, plan))
-    child_plans.sort(key=lambda item: (item[0], item[1]), reverse=True)
-    if not parent_plan and not child_plans:
-        print("nothing to revert")
-        return
-    print(f"# run from {project_root()}\n")
-    if parent_plan:
-        print_revert_section(parent_plan)
-    for _, child_id, plan in child_plans:
-        print(f"# === delegate {child_id} ===\n")
-        print_revert_section(plan)
+def print_comment_lines(prefix, text):
+    lines = text.splitlines() or [""]
+    print(f"{prefix}{lines[0]}")
+    for extra in lines[1:]:
+        print(f"# {extra}")
 
 
 def print_revert(item, live):
-    print(f"# #{item['of']} {item['state']}, {item['class']}: {item['why']}")
+    print_comment_lines(f"# #{item['of']} {item['state']}, {item['class']}: ", item["why"])
     if "no_revert" in item:
-        print(f"# cannot be reverted: {item['no_revert']}\n")
+        print_comment_lines("# cannot be reverted: ", item["no_revert"])
+        print()
     elif live:
         print(f"{item['command']}\n")
     else:
         print("\n".join(f"# {line}" for line in item["command"].splitlines()) + "\n")
+
+
+def print_revert_records(records, show_sources):
+    executed = [r for r in records if r[3]["state"] == "executed"]
+    uncertain = [r for r in records if r[3]["state"] in ("outcome unknown", "failed")]
+    planned = [r for r in records if r[3]["state"].startswith("planned")]
+
+    def emit_tier(tier_records, banner, live):
+        if not tier_records:
+            return
+        if banner:
+            print(f"{banner}\n")
+        current_source = object()
+        for _, _, source_id, item in tier_records:
+            if show_sources and source_id != current_source:
+                if source_id is not None:
+                    print_comment_lines("# === delegate ", f"{source_id} ===")
+                else:
+                    print("# === parent ===")
+                print()
+                current_source = source_id
+            print_revert(item, live=live)
+
+    emit_tier(executed, None, live=True)
+    emit_tier(uncertain, "# --- failed or outcome unknown: check live state before reverting ---", live=False)
+    emit_tier(planned, "# --- planned, not known to have run: uncomment only for a change you ran ---", live=False)
+
+
+def cmd_revert_plan(args):
+    parent_path = locate(args.id)
+    root = project_root(for_locate=True)
+    work_root = work_root_dir(root)
+    records = collect_revert_records(load(parent_path), None)
+    seen = {parent_path}
+    has_delegates = False
+    for child_path in sorted(parent_path.parent.rglob("log.yml")):
+        resolved = child_path.resolve()
+        if resolved in seen or not resolved.is_relative_to(work_root):
+            continue
+        seen.add(resolved)
+        child_id = resolved.parent.relative_to(work_root).as_posix()
+        child_records = collect_revert_records(load(resolved), child_id)
+        if child_records:
+            has_delegates = True
+            records.extend(child_records)
+    if not records:
+        print("nothing to revert")
+        return
+    records.sort(key=lambda r: (r[0], r[1], r[2] or ""), reverse=True)
+    print_comment_lines("# run from ", str(root))
+    print()
+    print_revert_records(records, show_sources=has_delegates)
 
 
 def parser():

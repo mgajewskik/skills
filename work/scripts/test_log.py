@@ -41,11 +41,11 @@ class LogTest(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = log.main(list(argv))
-        return code, out.getvalue().strip()
+        return code, out.getvalue().strip(), err.getvalue().strip()
 
     def ok(self, *argv):
-        code, out = self.run_log(*argv)
-        self.assertEqual(code, 0, f"{argv} -> {out}")
+        code, out, err = self.run_log(*argv)
+        self.assertEqual(code, 0, f"{argv} -> stdout={out!r} stderr={err!r}")
         return out
 
     def new(self, slug="fix-api"):
@@ -181,7 +181,7 @@ class LogTest(unittest.TestCase):
         self.ok(*reversible, "--why", "scale up", "--command", "scale 5", "--revert", "scale 3")
         self.ok(*reversible, "--why", "conns", "--command", "patch 4096", "--revert", "patch\n  1024")
         self.ok("add", log_id, "run", "--class", "read-only", "--command", "get cm")
-        header = f"# run from {log.project_root()}\n\n"
+        header = f"# run from {self.project.resolve()}\n\n"
         scale = "# #1 executed, reversible: scale up\nscale 3"
         self.assertEqual(self.ok("revert-plan", log_id),
                          header + "# #2 executed, reversible: conns\npatch\n  1024\n\n" + scale)
@@ -205,9 +205,9 @@ class LogTest(unittest.TestCase):
         self.assertEqual(self.run_log(*plan)[0], 2)
         self.assertEqual(self.run_log(*plan, "--revert", "kubectl apply -f {artifact}")[0], 2)
         self.ok(*plan, "--revert", "kubectl apply -f {artifact}", "--artifact", str(manifest))
-        self.ok("add", log_id, "run", "--class", "irreversible", "--why", "drop cache", "--command",
+        self.ok("add", log_id, "run", "--by", "user", "--class", "irreversible", "--why", "drop cache", "--command",
                 "redis-cli FLUSHDB", "--no-revert", "cache contents are not backed up")
-        self.ok("add", log_id, "run", "--class", "irreversible", "--why", "delete pvc", "--command",
+        self.ok("add", log_id, "run", "--by", "user", "--class", "irreversible", "--why", "delete pvc", "--command",
                 "kubectl delete pvc data", "--revert", "velero restore create --from-backup nightly")
         saved = f".work/{log_id}/001-cm-nginx-before.yaml"
         self.assertEqual((self.project / saved).read_text(), manifest.read_text())
@@ -219,7 +219,7 @@ class LogTest(unittest.TestCase):
             {"of": 1, "state": "planned for user", "class": "reversible", "why": "raise conns",
              "command": f"kubectl apply -f {saved}"}])
         self.assertEqual(self.ok("revert-plan", log_id), (
-            f"# run from {log.project_root()}\n\n"
+            f"# run from {self.project.resolve()}\n\n"
             "# #3 executed, irreversible: delete pvc\nvelero restore create --from-backup nightly\n\n"
             "# #2 executed, irreversible: drop cache\n# cannot be reverted: cache contents are not backed up\n\n"
             "# --- planned, not known to have run: uncomment only for a change you ran ---\n\n"
@@ -400,7 +400,7 @@ class LogTest(unittest.TestCase):
         exclude.chmod(0o444)
         info_dir.chmod(0o555)
         try:
-            code, _ = self.run_log("new", "unwritable", "--task", "t", "--playbook", "debug")
+            code, _, _ = self.run_log("new", "unwritable", "--task", "t", "--playbook", "debug")
             self.assertEqual(code, 2)
             self.assertFalse((self.project / ".work" / f"{TODAY}-unwritable").exists())
         finally:
@@ -462,6 +462,179 @@ class LogTest(unittest.TestCase):
         log.save(log.locate(second), second_doc)
         output = self.ok("revert-plan", parent)
         self.assertLess(output.index("api down"), output.index("db down"))
+
+    def test_revert_plan_escapes_multiline_why_and_no_revert(self):
+        log_id = self.new("nl-safety")
+        self.ok("add", log_id, "run", "--by", "user", "--class", "irreversible",
+                "--why", "drop table\nrm -rf /tmp/should-not-run",
+                "--command", "drop table sessions",
+                "--no-revert", "no backup\necho injected")
+        plan = self.ok("revert-plan", log_id)
+        non_empty = [line for line in plan.splitlines() if line.strip()]
+        self.assertTrue(non_empty)
+        for line in non_empty:
+            self.assertTrue(line.startswith("#"), f"uncommented line in irreversible revert-plan: {line!r}")
+
+    def test_secret_filter_allows_prose_and_redacted_placeholders_and_blocks_real_keys(self):
+        log_id = self.new("secret-check")
+        for allowed in (
+            "Fix basic authentication flow and basic validation",
+            "Fix Basic Authentication flow and HTTP Basic Authorization failed",
+            "Enable Basic Configuration check",
+            "Switch from Bearer authentication to mTLS and use Bearer credentials from vault",
+            "basic configuration and basic healthcheck passed",
+            "docker run -u 1000:1000 alpine id",
+            "docker exec --user 0:0 web whoami",
+            "docker run --user app:app myapp",
+            "token: expired and password: missing",
+            "password_policy=strict secret_store=vault token_header=X-Auth-Token api_key_env=OPENAI_API_KEY",
+            "DB_PASSWORD=REDACTED",
+            "curl --password [REDACTED] https://api.example.com",
+            "curl -H 'Authorization: Bearer REDACTED' https://api.example.com",
+            "Bearer $API_TOKEN",
+            "postgres://app:REDACTED@db.internal:5432/prod",
+        ):
+            self.ok("add", log_id, "note", "--text", allowed)
+
+        for secret in (
+            "ASIAIOSFODNN7EXAMPLE",
+            "AIzaSyDaGmWKa4JsXZ-HjGw7ISLn_3namBGqeQe",
+            "npm_1234567890abcdefghijklmnopqrstuv",
+            "AGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ",
+            "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+            'DB_PASSWORD=" secret123"',
+            "Authorization: Basic dXNlcjpwYXNz",
+            "Basic dXNlcjpwYXNz",
+            "Bearer abcdefgh12345678",
+            "curl -u alice:s3cr3tpass https://api.example.com",
+            "curl -sS --user alice:s3cr3tpass https://api.example.com",
+            "data:\n  tls.key: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t",
+        ):
+            self.assertEqual(self.run_log("add", log_id, "note", "--text", secret)[0], 2, secret)
+
+        secret_name = self.file("ghp_abcdefghijklmnopqrstuvwxyz0123456789.txt")
+        secret_name.write_text("harmless body\n")
+        self.assertEqual(self.run_log("add", log_id, "note", "--text", "ok", "--artifact", str(secret_name))[0], 2)
+        self.assertEqual(self.run_log("new", "sk-abcdefghijklmnopqrstuvwxyz", "--task", "t", "--playbook", "debug")[0], 2)
+
+    def test_revert_plan_orders_parent_and_delegates_chronologically_across_timezones_and_dedups_symlinks(self):
+        parent = self.ok("new", "rollout-order", "--task", "rollout", "--playbook", "auto")
+        early_child = self.ok("new", "step-early", "--task", "early", "--playbook", "deploy", "--parent", parent)
+        mid_child = self.ok("new", "step-mid", "--task", "mid", "--playbook", "deploy", "--parent", parent)
+        self.ok("add", parent, "run", "--class", "reversible", "--why", "p-1000z",
+                "--command", "p1", "--revert", "undo-p-1000z")
+        self.ok("add", early_child, "run", "--class", "reversible", "--why", "c-0900z-plus2",
+                "--command", "c1", "--revert", "undo-c-0900z")
+        self.ok("add", mid_child, "run", "--class", "reversible", "--why", "c-1030z",
+                "--command", "c2", "--revert", "undo-c-1030z")
+        self.ok("add", parent, "run", "--class", "reversible", "--why", "p-1200z",
+                "--command", "p2", "--revert", "undo-p-1200z")
+
+        pdoc = self.doc(parent)
+        pdoc["timeline"][0]["at"] = "2026-11-24T10:00:00+00:00"
+        pdoc["timeline"][1]["at"] = "2026-11-24T12:00:00+00:00"
+        log.save(log.locate(parent), pdoc)
+        edoc = self.doc(early_child)
+        edoc["timeline"][0]["at"] = "2026-11-24T11:00:00+02:00"
+        log.save(log.locate(early_child), edoc)
+        mdoc = self.doc(mid_child)
+        mdoc["timeline"][0]["at"] = "2026-11-24T10:30:00+00:00"
+        log.save(log.locate(mid_child), mdoc)
+
+        loop_dir = self.project / ".work" / parent / "nested-loop"
+        loop_dir.mkdir()
+        (loop_dir / "log.yml").symlink_to(self.project / ".work" / parent / "log.yml")
+
+        out = self.ok("revert-plan", parent)
+        self.assertEqual(out.count("undo-p-1200z"), 1)
+        self.assertEqual(out.count("undo-p-1000z"), 1)
+        positions = [out.index(cmd) for cmd in ("undo-p-1200z", "undo-c-1030z", "undo-p-1000z", "undo-c-0900z")]
+        self.assertEqual(positions, sorted(positions), out)
+
+    def test_closed_log_rejects_further_mutations(self):
+        log_id = self.new("closed-log")
+        self.ok("close", log_id, "--status", "done", "--summary", "finished")
+        before = log.locate(log_id).read_bytes()
+        for argv in (
+            ("add", log_id, "note", "--text", "late"),
+            ("phase", log_id, "2. Late"),
+            ("root-cause", log_id, "--summary", "late", "--confidence", "unknown"),
+            ("close", log_id, "--status", "halted", "--summary", "reclose"),
+            ("new", "late-child", "--task", "t", "--playbook", "fix", "--parent", log_id),
+        ):
+            self.assertEqual(self.run_log(*argv)[0], 2, argv)
+        self.assertEqual(log.locate(log_id).read_bytes(), before)
+        self.assertEqual(list((self.project / ".work" / log_id).iterdir()), [log.locate(log_id)])
+
+    def test_schema_enforces_irreversible_user_only_kind_fields_and_revert_targets(self):
+        log_id = self.new("schema-guards")
+        self.ok("add", log_id, "plan", "--by", "user", "--class", "reversible", "--why", "p",
+                "--command", "do", "--revert", "undo")
+        for bad in (
+            ("add", log_id, "plan", "--by", "agent", "--class", "irreversible", "--why", "wipe",
+             "--command", "wipe", "--no-revert", "gone"),
+            ("add", log_id, "run", "--by", "agent", "--class", "irreversible", "--why", "wipe",
+             "--command", "wipe", "--no-revert", "gone"),
+            ("add", log_id, "run", "--class", "irreversible", "--why", "wipe",
+             "--command", "wipe", "--no-revert", "gone"),
+            ("add", log_id, "note", "--text", "hi", "--claim", "c"),
+            ("add", log_id, "note", "--text", "hi", "--status", "failed"),
+            ("add", log_id, "note", "--text", "hi", "--class", "reversible"),
+            ("add", log_id, "plan", "--by", "user", "--class", "irreversible", "--why", "both",
+             "--command", "x", "--revert", "u", "--no-revert", "none"),
+            ("add", log_id, "plan", "--by", "user", "--class", "read-only", "--why", "ro",
+             "--command", "get", "--revert", "undo"),
+            ("add", log_id, "run", "--class", "reversible", "--command", "undo", "--reverts", "1", "--outcome", "ok"),
+        ):
+            self.assertEqual(self.run_log(*bad)[0], 2, bad)
+        self.ok("add", log_id, "run", "--by", "user", "--from-plan", "1", "--outcome", "ok")
+        self.assertEqual(
+            self.run_log("add", log_id, "run", "--class", "read-only", "--command", "undo", "--reverts", "2")[0], 2
+        )
+        self.assertEqual(
+            self.run_log("add", log_id, "run", "--class", "reversible", "--command", "undo",
+                         "--reverts", "2", "--revert", "redo")[0], 2
+        )
+
+    def test_superseded_phase_does_not_attach_to_later_entries(self):
+        log_id = self.new("phase-supersede")
+        self.ok("phase", log_id, "1. Real phase")
+        self.ok("phase", log_id, "9. Typo phase")
+        self.ok("add", log_id, "note", "--text", "drop typo phase", "--supersedes", "2")
+        self.ok("add", log_id, "note", "--text", "after supersede")
+        timeline = self.doc(log_id)["timeline"]
+        self.assertEqual(timeline[-2]["phase"], "1. Real phase")
+        self.assertEqual(timeline[-1]["phase"], "1. Real phase")
+
+    def test_quoted_artifact_placeholder_nongit_subdir_exclude_newline_and_broken_symlink(self):
+        exclude_path = self.project / ".git" / "info" / "exclude"
+        exclude_path.write_text("# existing\n*.tmp\n")
+        log_id = self.new("quoted-art")
+        self.assertEqual(exclude_path.read_text(), "# existing\n*.tmp\n/.work/\n")
+
+        snap = self.file("my snapshot.txt")
+        snap.write_text("restored-ok\n")
+        self.ok("add", log_id, "run", "--class", "reversible", "--why", "update",
+                "--command", "write new", "--revert", 'cat "{artifact}"', "--artifact", str(snap))
+        plan_lines = [line for line in self.ok("revert-plan", log_id).splitlines()
+                      if line and not line.startswith("#")]
+        self.assertEqual(len(plan_lines), 1)
+        out = subprocess.run(["sh", "-c", plan_lines[0]], cwd=self.project, capture_output=True, text=True, check=True)
+        self.assertEqual(out.stdout, "restored-ok\n")
+
+        (self.project / ".work" / f"{TODAY}-broken-sym").symlink_to(self.project / "does-not-exist")
+        self.assertEqual(self.new("broken-sym"), f"{TODAY}-broken-sym-2")
+
+        self.assertEqual(self.run_log("check", log_id, "--max-age-hours", "nan")[0], 2)
+        self.assertEqual(self.run_log("check", log_id, "--max-age-hours", "-1")[0], 2)
+
+        nongit = Path(self.tmp.name) / "nongit"
+        (nongit / "nested" / "deep").mkdir(parents=True)
+        os.chdir(nongit)
+        ng_id = self.new("outside-git")
+        os.chdir(nongit / "nested" / "deep")
+        self.assertEqual(self.ok("add", ng_id, "note", "--text", "found from subdir"), "1")
+        self.assertEqual(self.ok("revert-plan", ng_id), "nothing to revert")
 
 
 if __name__ == "__main__":

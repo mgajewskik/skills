@@ -5,14 +5,18 @@
 # ///
 """Structural tests for the work skill. Run: uv run --script test_work.py"""
 
+import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-import yaml
+sys.dont_write_bytecode = True
+
+import yaml  # noqa: E402
 
 WORK_DIR = Path(__file__).resolve().parent.parent
 LINK_RE = re.compile(r"\]\(([^)#\s]+)(?:#[^)]+)?\)")
@@ -168,6 +172,78 @@ class WorkSkillTest(unittest.TestCase):
                 "# Attack the Premise\n\nSee [fix](fix-root-causes.md).\n",
             )
             self.assertEqual((backup / "upstream-local" / "prove-it-works.md").read_text(), "# Upstream Prove\n")
+
+    def test_every_file_backed_principle_is_referenced_by_at_least_one_playbook(self):
+        principle_files = {p.stem for p in (WORK_DIR / "principles").glob("*.md")}
+        referenced = set()
+        for pb in (WORK_DIR / "playbooks").glob("*.md"):
+            for target in relative_links(pb):
+                resolved = (pb.parent / target).resolve()
+                if resolved.parent == (WORK_DIR / "principles").resolve():
+                    referenced.add(resolved.stem)
+        self.assertEqual(sorted(principle_files - referenced), [])
+
+    def test_implement_requires_redesign_from_first_principles(self):
+        implement_text = (WORK_DIR / "playbooks" / "implement.md").read_text()
+        self.assertIn("../principles/redesign-from-first-principles.md", implement_text)
+
+    def test_update_script_ownership_lists_match_principles_and_skill_md(self):
+        update_text = (WORK_DIR / "scripts" / "update.sh").read_text()
+        local_owned = set(re.findall(r"(?m)^    ([a-z0-9-]+)$", update_text.split("LOCAL_OWNED=(")[1].split(")")[0]))
+        inlined = set(re.findall(r"(?m)^    ([a-z0-9-]+)$", update_text.split("INLINED=(")[1].split(")")[0]))
+        actual = {p.stem for p in (WORK_DIR / "principles").glob("*.md")}
+        self.assertEqual(sorted(local_owned - actual), [])
+        self.assertEqual(sorted(inlined & actual), [])
+        skill_principles = (WORK_DIR / "SKILL.md").read_text().split("## Principles", 1)[1]
+        for slug in sorted(inlined):
+            title_pattern = rf"(?im)^- \*\*{re.escape(slug.replace('-', ' '))}\.\*\*"
+            self.assertRegex(skill_principles, title_pattern)
+
+    def test_hooks_emit_valid_payloads_and_yield_to_other_skills(self):
+        fm = frontmatter(WORK_DIR / "SKILL.md")
+        hooks = fm["hooks"]
+        prompt_cmd = hooks["UserPromptSubmit"][0]["hooks"][0]["command"]
+        prompt_out = subprocess.run(["sh", "-c", prompt_cmd], capture_output=True, text=True, check=True).stdout
+        self.assertIn("another skill", prompt_out.lower())
+
+        sub_entry = hooks["SubagentStart"][0]
+        matcher = re.compile(sub_entry["matcher"])
+        for agent_type in ("general-purpose", "Explore", "Plan", "sonnet", "opus", "haiku", "claude"):
+            self.assertRegex(agent_type, matcher)
+        sub_cmd = sub_entry["hooks"][0]["command"]
+        sub_out = subprocess.run(["sh", "-c", sub_cmd], capture_output=True, text=True, check=True).stdout
+        payload = json.loads(sub_out)
+        ctx = payload["hookSpecificOutput"]["additionalContext"].lower()
+        self.assertEqual(payload["hookSpecificOutput"]["hookEventName"], "SubagentStart")
+        self.assertIn("another skill", ctx)
+        self.assertIn("never spawn a reviewer", ctx)
+        self.assertNotIn("under auto, return review inputs", ctx)
+
+    def test_review_playbook_is_self_contained_and_free_of_orphan_envelope_fields(self):
+        review_text = (WORK_DIR / "playbooks" / "review.md").read_text()
+        self.assertNotIn("TASK_NAME:", review_text)
+        self.assertNotIn("PARENT_HANDOFF:", review_text)
+        self.assertIn("tool directives", review_text.lower())
+        self.assertIn("workaround", review_text.lower())
+
+    def test_auto_routes_review_through_orchestrator_not_nested_subagents(self):
+        skill_text = (WORK_DIR / "SKILL.md").read_text().lower()
+        self.assertIn("orchestrator-only reviewer spawning", skill_text)
+        self.assertNotIn("**under `auto`:** unit subagents", skill_text)
+        review_text = (WORK_DIR / "playbooks" / "review.md").read_text().lower()
+        self.assertIn("only the main", review_text)
+        self.assertIn("never spawns a reviewer", review_text)
+        auto_text = (WORK_DIR / "playbooks" / "auto.md").read_text().lower()
+        self.assertIn("orchestrator", auto_text)
+        self.assertIn("reviewer", auto_text)
+        self.assertIn("same reviewed delegate log", auto_text)
+        deploy_text = (WORK_DIR / "playbooks" / "deploy.md").read_text().lower()
+        self.assertIn("same reviewed delegate log", deploy_text)
+        for caller in ("implement.md", "fix.md", "reduce.md", "deploy.md"):
+            text = (WORK_DIR / "playbooks" / caller).read_text().lower()
+            self.assertIn("orchestrator", text, caller)
+            self.assertIn("never spawn a reviewer", text, caller)
+            self.assertNotIn("when running as an `auto` unit", text, caller)
 
 
 if __name__ == "__main__":
