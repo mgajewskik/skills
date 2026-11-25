@@ -91,11 +91,12 @@ class WorkSkillTest(unittest.TestCase):
         self.assertNotIn("replaces Teardown step 8", auto_text)
         self.assertNotIn("replaces Teardown's destroy handover", auto_text)
 
-    def test_review_playbook_exists_and_is_wired_across_playbooks(self):
+    def test_review_playbook_supports_full_delta_plan_modes_and_verification_skills(self):
         review_path = WORK_DIR / "playbooks" / "review.md"
         self.assertTrue(review_path.is_file())
         review_text = review_path.read_text()
-        self.assertIn("adversarial", review_text.lower())
+        review_lower = review_text.lower()
+        self.assertIn("adversarial", review_lower)
         for required in (
             "read-only",
             "Decision: PASS",
@@ -107,12 +108,21 @@ class WorkSkillTest(unittest.TestCase):
             "Work log",
             "artifact revision",
             "--no-revert",
+            "mode: full",
+            "mode: delta",
+            "mode: plan",
         ):
-            self.assertIn(required, review_text)
-        for caller in ("implement.md", "fix.md", "reduce.md", "deploy.md", "auto.md", "investigate.md"):
+            self.assertIn(required.lower(), review_lower, required)
+        self.assertIn("verification steps or", review_lower)
+        self.assertIn("skills", review_lower)
+        self.assertIn("incremental diff", review_lower)
+        self.assertIn("no diff", review_lower)
+        for caller in ("deploy.md", "auto.md", "investigate.md"):
             self.assertIn("(review.md)", (WORK_DIR / "playbooks" / caller).read_text(), caller)
-        self.assertNotIn("significant behavior", (WORK_DIR / "playbooks" / "implement.md").read_text())
-        self.assertNotIn("significant behavior", (WORK_DIR / "playbooks" / "fix.md").read_text())
+        for code_pb in ("implement.md", "fix.md", "reduce.md"):
+            pb_text = (WORK_DIR / "playbooks" / code_pb).read_text()
+            self.assertNotIn("**Independent review.**", pb_text, code_pb)
+            self.assertNotIn("(review.md)", pb_text, code_pb)
 
     def test_update_script_syntax_is_valid(self):
         proc = subprocess.run(["bash", "-n", str(WORK_DIR / "scripts" / "update.sh")], capture_output=True, text=True)
@@ -226,24 +236,37 @@ class WorkSkillTest(unittest.TestCase):
         self.assertIn("tool directives", review_text.lower())
         self.assertIn("workaround", review_text.lower())
 
-    def test_auto_routes_review_through_orchestrator_not_nested_subagents(self):
+    def test_orchestrator_significance_gate_and_non_nested_review_routing(self):
         skill_text = (WORK_DIR / "SKILL.md").read_text().lower()
         self.assertIn("orchestrator-only reviewer spawning", skill_text)
-        self.assertNotIn("**under `auto`:** unit subagents", skill_text)
+        self.assertIn("significance gate", skill_text)
+        self.assertIn("mode: full", skill_text)
+        self.assertIn("mode: delta", skill_text)
+        self.assertIn("mode: plan", skill_text)
+        self.assertIn("review: skipped", skill_text)
+        self.assertNotIn("required after every implementation", skill_text)
+        self.assertNotIn("without dropping goal first, real checks, or independent review", skill_text)
+
         review_text = (WORK_DIR / "playbooks" / "review.md").read_text().lower()
         self.assertIn("only the main", review_text)
         self.assertIn("never spawns a reviewer", review_text)
+        self.assertIn("not a `blocker`", review_text)
+
         auto_text = (WORK_DIR / "playbooks" / "auto.md").read_text().lower()
         self.assertIn("orchestrator", auto_text)
         self.assertIn("reviewer", auto_text)
         self.assertIn("same reviewed delegate log", auto_text)
+        self.assertIn("mode: delta", auto_text)
+        self.assertIn("mode: plan", auto_text)
+        self.assertNotIn("for every unit whose playbook calls for independent review", auto_text)
+
         deploy_text = (WORK_DIR / "playbooks" / "deploy.md").read_text().lower()
         self.assertIn("same reviewed delegate log", deploy_text)
-        for caller in ("implement.md", "fix.md", "reduce.md", "deploy.md"):
-            text = (WORK_DIR / "playbooks" / caller).read_text().lower()
-            self.assertIn("orchestrator", text, caller)
-            self.assertIn("never spawn a reviewer", text, caller)
-            self.assertNotIn("when running as an `auto` unit", text, caller)
+        self.assertIn("never spawn a reviewer", deploy_text)
+        self.assertIn("mode: full", deploy_text)
+
+        guided_text = (WORK_DIR / "playbooks" / "guided.md").read_text().lower()
+        self.assertIn("significance gate", guided_text)
 
     def test_debug_playbook_and_skill_document_artifacts_suggest_closing_and_reopen(self):
         debug_text = (WORK_DIR / "playbooks" / "debug.md").read_text().lower()
